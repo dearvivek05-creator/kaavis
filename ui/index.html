@@ -582,6 +582,23 @@
       Always listening
     </label>
     <span class="support-note" id="supportNote" hidden>Voice input isn't supported in this browser — try Chrome or Edge.</span>
+    <details class="custom-voice">
+      <summary>Speech input</summary>
+      <div class="custom-voice-body">
+        <label>Engine
+          <select id="sttEngine">
+            <option value="browser">Browser (built-in)</option>
+            <option value="deepgram">Deepgram</option>
+          </select>
+        </label>
+        <label>Deepgram API key
+          <input type="password" id="deepgramKey" placeholder="dg_...">
+        </label>
+        <p class="hint">Saved to this browser's local storage only, sent directly from your browser to Deepgram, never committed to the repo or sent anywhere else. Get a key at console.deepgram.com.</p>
+        <button id="saveStt" type="button">Save</button>
+        <span class="flash" id="saveSttFlash" hidden>Saved</span>
+      </div>
+    </details>
   </div>
   <div class="voicebar-right">
     <label>Output voice
@@ -1111,6 +1128,27 @@
     speak(generic[Math.floor(Math.random() * generic.length)]);
   }
 
+  // ---------- Speech input settings (engine + Deepgram key) ----------
+  var sttEngineSelect = document.getElementById('sttEngine');
+  var deepgramKeyInput = document.getElementById('deepgramKey');
+  var saveSttBtn = document.getElementById('saveStt');
+  var saveSttFlash = document.getElementById('saveSttFlash');
+
+  sttEngineSelect.value = localStorage.getItem('kaavis.sttEngine') || 'browser';
+  deepgramKeyInput.value = localStorage.getItem('kaavis.deepgramKey') || '';
+
+  saveSttBtn.addEventListener('click', function () {
+    localStorage.setItem('kaavis.sttEngine', sttEngineSelect.value);
+    localStorage.setItem('kaavis.deepgramKey', deepgramKeyInput.value);
+    saveSttFlash.hidden = false;
+    setTimeout(function () { saveSttFlash.hidden = true; }, 1800);
+    logEntry('system', 'Speech input engine set to ' + (sttEngineSelect.value === 'deepgram' ? 'Deepgram' : 'browser built-in') + '.');
+  });
+
+  function currentSttEngine() {
+    return (sttEngineSelect.value === 'deepgram' && deepgramKeyInput.value.trim()) ? 'deepgram' : 'browser';
+  }
+
   // ---------- Speech recognition (voice input) ----------
   var SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
   var micBtn = document.getElementById('micBtn');
@@ -1121,12 +1159,17 @@
   var listening = false;
   var alwaysListenOn = false;
   var restartRequested = false;
+  var activeEngine = null; // 'browser' | 'deepgram'
+
+  function handleFinalTranscript(text) {
+    logEntry('user', text);
+    respondTo(text);
+    liveTranscript.textContent = '';
+  }
 
   if (!SpeechRecognitionImpl) {
-    micBtn.disabled = true;
-    alwaysListenBox.disabled = true;
     supportNote.hidden = false;
-    logEntry('system', 'Voice input unavailable in this browser. Try Chrome or Edge.');
+    logEntry('system', 'Browser voice input unavailable in this browser (try Chrome or Edge) — Deepgram still works if configured under Speech input.');
   } else {
     recognition = new SpeechRecognitionImpl();
     recognition.lang = 'en-US';
@@ -1141,11 +1184,7 @@
         else interim += transcript;
       }
       liveTranscript.textContent = final || interim;
-      if (final) {
-        logEntry('user', final.trim());
-        respondTo(final.trim());
-        liveTranscript.textContent = '';
-      }
+      if (final) handleFinalTranscript(final.trim());
     };
 
     recognition.onerror = function (e) {
@@ -1156,41 +1195,122 @@
     recognition.onend = function () {
       listening = false;
       micBtn.setAttribute('aria-pressed', 'false');
-      if (alwaysListenOn && restartRequested) {
+      if (alwaysListenOn && restartRequested && activeEngine === 'browser') {
         try { recognition.start(); listening = true; micBtn.setAttribute('aria-pressed', 'true'); }
         catch (err) { /* already stopped */ }
       } else {
         setOrbState('idle');
       }
     };
+  }
 
-    micBtn.addEventListener('click', function () {
-      if (listening) {
-        restartRequested = false;
-        recognition.stop();
-        setOrbState('idle');
-      } else {
-        restartRequested = true;
-        try {
-          recognition.start();
-          listening = true;
-          micBtn.setAttribute('aria-pressed', 'true');
-          setOrbState('listening');
-          logEntry('system', 'Listening...');
-        } catch (err) { /* already started */ }
-      }
-    });
+  function startBrowserListening() {
+    if (!recognition) {
+      logEntry('system', 'Browser voice input unavailable in this browser. Try Chrome or Edge, or configure Deepgram.');
+      return;
+    }
+    activeEngine = 'browser';
+    restartRequested = true;
+    try {
+      recognition.start();
+      listening = true;
+      micBtn.setAttribute('aria-pressed', 'true');
+      setOrbState('listening');
+      logEntry('system', 'Listening (browser)...');
+    } catch (err) { /* already started */ }
+  }
+  function stopBrowserListening() {
+    restartRequested = false;
+    if (recognition) recognition.stop();
+    setOrbState('idle');
+  }
 
-    alwaysListenBox.addEventListener('change', function () {
-      alwaysListenOn = alwaysListenBox.checked;
-      if (alwaysListenOn && !listening) {
-        micBtn.click();
-      } else if (!alwaysListenOn && listening) {
-        restartRequested = false;
-      }
-      logEntry('system', 'Always-listening mode ' + (alwaysListenOn ? 'enabled' : 'disabled') + '.');
+  // ---------- Deepgram streaming STT ----------
+  var dgSocket = null, dgRecorder = null, dgStream = null;
+
+  function startDeepgramListening() {
+    activeEngine = 'deepgram';
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      dgStream = stream;
+      var url = 'wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&interim_results=true&punctuate=true';
+      dgSocket = new WebSocket(url, ['token', deepgramKeyInput.value.trim()]);
+
+      dgSocket.onopen = function () {
+        listening = true;
+        micBtn.setAttribute('aria-pressed', 'true');
+        setOrbState('listening');
+        logEntry('system', 'Listening (Deepgram)...');
+        dgRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        dgRecorder.ondataavailable = function (e) {
+          if (e.data.size > 0 && dgSocket && dgSocket.readyState === WebSocket.OPEN) dgSocket.send(e.data);
+        };
+        dgRecorder.start(250);
+      };
+
+      dgSocket.onmessage = function (event) {
+        var data;
+        try { data = JSON.parse(event.data); } catch (e) { return; }
+        var alt = data.channel && data.channel.alternatives && data.channel.alternatives[0];
+        if (!alt) return;
+        var transcript = alt.transcript;
+        if (!transcript) return;
+        liveTranscript.textContent = transcript;
+        if (data.is_final && transcript.trim()) {
+          handleFinalTranscript(transcript.trim());
+          if (!alwaysListenOn) stopDeepgramListening();
+        }
+      };
+
+      dgSocket.onerror = function () {
+        logEntry('system', 'Deepgram connection error — check your API key.');
+        stopDeepgramListening();
+      };
+
+      dgSocket.onclose = function () {
+        if (activeEngine === 'deepgram' && listening) {
+          listening = false;
+          micBtn.setAttribute('aria-pressed', 'false');
+          setOrbState('idle');
+        }
+      };
+    }).catch(function (err) {
+      logEntry('system', 'Microphone access failed: ' + err.message);
     });
   }
+
+  function stopDeepgramListening() {
+    if (dgRecorder && dgRecorder.state !== 'inactive') dgRecorder.stop();
+    if (dgStream) dgStream.getTracks().forEach(function (t) { t.stop(); });
+    if (dgSocket && dgSocket.readyState === WebSocket.OPEN) {
+      dgSocket.send(JSON.stringify({ type: 'CloseStream' }));
+      dgSocket.close();
+    }
+    dgSocket = null; dgRecorder = null; dgStream = null;
+    listening = false;
+    micBtn.setAttribute('aria-pressed', 'false');
+    setOrbState('idle');
+  }
+
+  // ---------- Unified mic control ----------
+  micBtn.addEventListener('click', function () {
+    if (listening) {
+      if (activeEngine === 'deepgram') stopDeepgramListening();
+      else stopBrowserListening();
+      return;
+    }
+    if (currentSttEngine() === 'deepgram') startDeepgramListening();
+    else startBrowserListening();
+  });
+
+  alwaysListenBox.addEventListener('change', function () {
+    alwaysListenOn = alwaysListenBox.checked;
+    if (alwaysListenOn && !listening) {
+      micBtn.click();
+    } else if (!alwaysListenOn && listening && activeEngine === 'browser') {
+      restartRequested = false;
+    }
+    logEntry('system', 'Always-listening mode ' + (alwaysListenOn ? 'enabled' : 'disabled') + '.');
+  });
 
   // ---------- Mic-reactive amplitude (visual only, separate stream) ----------
   var audioCtx = null, analyser = null, dataArray = null, micStream = null;

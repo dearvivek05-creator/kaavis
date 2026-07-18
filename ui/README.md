@@ -33,3 +33,11 @@ Open `index.html` directly in Chrome or Edge (voice input needs the Web Speech A
 ## Adding a voice
 
 Open the "Custom voice" panel at the bottom right. Pick a provider (ElevenLabs, Azure, Play.ht, or Other) and paste a voice ID — it's saved locally in your browser only. Nothing is sent anywhere until that provider's API is actually wired up.
+
+## Using Deepgram for voice input
+
+The default speech-to-text engine is the browser's built-in `SpeechRecognition` (Chrome/Edge only, no custom vocabulary). Open the "Speech input" panel next to the mic button, switch the engine to **Deepgram**, and paste an API key from [console.deepgram.com](https://console.deepgram.com) — this gives real-time streaming transcription with better accuracy across more browsers.
+
+The key is saved to this browser's local storage only and sent directly from your browser to Deepgram over a WebSocket. It is **never** written to this repo or sent anywhere else — `kaavis` is a public repo, so no key should ever be hardcoded into `index.html`. Because KAAVIS is a single-user personal tool, storing your own key in your own browser is an accepted tradeoff; don't share that browser profile or its local storage.
+
+This path was reviewed carefully but not run end-to-end against a live Deepgram account — the sandboxed environment used to build it can't grant microphone access. Test it yourself with a real key before relying on it.
