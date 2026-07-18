@@ -30,6 +30,12 @@ then open **http://localhost:5550/** in Chrome or Edge. Web search, voice, and e
 
 **A note on "Open Apps"**: the HTTP API and its success/failure reporting are verified correct — it genuinely calls `Start-Process` and returns real results (confirmed a bad app name correctly returns an honest error). In my own test environment, apps launched through the server sometimes didn't stay open, while the identical command run directly in an interactive terminal worked reliably — this looks like an artifact of how my automated tooling supervises background processes, not a bug in the script itself, but I couldn't fully root-cause it. Please verify on your machine (run the server from your own terminal, not through any automation, and try "open notepad") before relying on it.
 
+## Wake word
+
+Push-to-talk (clicking the mic) always acts on whatever it hears. **Always listening** mode is different: with a wake word set (the "Wake word" field next to the toggle, default `kaavis`), it ignores ambient speech and only responds to phrases containing that word — say "hey kaavis, open notepad" and it strips the wake word and runs "open notepad". Clear the field to make Always listening act on everything again (not recommended unless you're in a quiet room).
+
+Commands also tolerate a bit of natural phrasing now — leading "hey", "please", "can you", etc. are stripped before matching, so "can you search for pizza please" works the same as "search for pizza".
+
 ## Adding a voice
 
 Open the "Custom voice" panel at the bottom right. Pick a provider (ElevenLabs, Azure, Play.ht, or Other) and paste a voice ID — it's saved locally in your browser only. Nothing is sent anywhere until that provider's API is actually wired up.

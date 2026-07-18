@@ -581,6 +581,10 @@
       <input type="checkbox" id="alwaysListen">
       Always listening
     </label>
+    <label class="switch-label" title="Required before KAAVIS acts on anything heard while Always listening is on. Leave blank to disable.">
+      Wake word
+      <input type="text" id="wakeWordInput" placeholder="kaavis" style="width:80px;">
+    </label>
     <span class="support-note" id="supportNote" hidden>Voice input isn't supported in this browser — try Chrome or Edge.</span>
     <details class="custom-voice">
       <summary>Speech input</summary>
@@ -911,7 +915,15 @@
   }
 
   // ---------- Command handling ----------
-  function respondTo(text) {
+  function stripFiller(text) {
+    return text.trim().replace(/^(hey|ok|okay)[,\s]+/i, '')
+      .replace(/^kaavis[,\s]+/i, '')
+      .replace(/^(please|can you|could you|would you|will you)\s+/i, '')
+      .trim();
+  }
+
+  function respondTo(rawText) {
+    var text = stripFiller(rawText);
     var lower = text.toLowerCase();
 
     if (/what.?s the time|what time is it/.test(lower)) {
@@ -976,7 +988,36 @@
   var restartRequested = false;
   var activeEngine = null; // 'browser' | 'deepgram'
 
+  var wakeWordInput = document.getElementById('wakeWordInput');
+  wakeWordInput.value = localStorage.getItem('kaavis.wakeWord') || 'kaavis';
+  wakeWordInput.addEventListener('change', function () {
+    localStorage.setItem('kaavis.wakeWord', wakeWordInput.value.trim());
+    logEntry('system', wakeWordInput.value.trim()
+      ? 'Wake word set to "' + wakeWordInput.value.trim() + '".'
+      : 'Wake word cleared — always-listening mode will act on everything it hears.');
+  });
+
+  function stripWakeWord(text) {
+    var wake = wakeWordInput.value.trim().toLowerCase();
+    if (!wake) return text;
+    var re = new RegExp('\\b' + wake.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+    var m = text.match(re);
+    if (!m) return null;
+    return text.slice(m.index + m[0].length).replace(/^[,.\s]+/, '').trim();
+  }
+
   function handleFinalTranscript(text) {
+    if (alwaysListenOn) {
+      var afterWake = stripWakeWord(text);
+      if (afterWake === null) return; // ambient speech without the wake word — ignore
+      if (afterWake === '') {
+        logEntry('user', text);
+        speak('Yes?');
+        liveTranscript.textContent = '';
+        return;
+      }
+      text = afterWake;
+    }
     logEntry('user', text);
     respondTo(text);
     liveTranscript.textContent = '';
@@ -1182,6 +1223,7 @@
   // ---------- Boot ----------
   logEntry('system', 'KAAVIS voice shell initialized.');
   logEntry('system', 'Try "search for <query>" or "open <app or site>" — those actually execute. Everything else in the panel on the left still needs real credentials.');
+  logEntry('system', 'With Always listening on, say "' + (wakeWordInput.value.trim() || 'kaavis') + '" before a command — ambient speech without it is ignored.');
   checkCompanion();
 })();
 </script>
