@@ -5,7 +5,7 @@
       "name": "kaavis-ui",
       "runtimeExecutable": "powershell",
       "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/serve-ui.ps1"],
-      "port": 5500
+      "port": 5550
     }
   ]
 }

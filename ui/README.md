@@ -4,19 +4,31 @@ A single self-contained HTML file (`index.html`) implementing the voice-first co
 
 ## What this is
 
-- A working voice loop: real speech-to-text (Web Speech API) and text-to-speech (`speechSynthesis`), no server required.
+- A working voice loop: real speech-to-text (Web Speech API or Deepgram) and text-to-speech (`speechSynthesis`).
 - The HUD orb reflects live state — idle, listening (reacts to your mic's volume), speaking.
-- An **Integrations** panel listing every source from PRD Section 6 (Email, Word, Google Docs, Obsidian, Apple Notes, Safari), each honestly marked as not connected, with what it needs to go live.
-- An **Action Log** — the accountability record described in PRD Section 10, currently logging voice input, KAAVIS's replies, and connect requests.
-- An **output voice picker**, populated from your system's installed voices, plus a placeholder for a custom TTS voice (provider + voice ID) once one is wired up.
+- A typed-command box below the transcript, for when a mic isn't handy — goes through the exact same command handling as voice.
+- **Two things that actually execute**, no credentials needed:
+  - **Web Search** — "search for `<query>`" opens real results in a new browser tab.
+  - **Open Apps** — "open `<app or site>`" launches a local app (via a small companion server, see below) or opens a website, depending on what you say.
+- An **Integrations** panel: Web Search and Open Apps show as connected; Email, Word, Google Docs, Apple Notes, and Safari are honestly marked not connected, with what each needs to go live (real OAuth credentials or platform bridges I can't fabricate on your behalf).
+- An **Action Log** — logs voice input, KAAVIS's replies, and every action taken.
+- An **output voice picker**, populated from your system's installed voices, plus a custom-voice placeholder (provider + voice ID) for a future TTS provider.
 
 ## What this isn't (yet)
 
-No integration in the left panel is actually connected — there's no backend, no OAuth, no file access. Clicking "Connect" logs the request and tells you what's needed; it doesn't perform the connection. That work follows the build sequence in PRD Section 12, starting with local file + Obsidian vault access.
+Email, Word, Google Docs, Apple Notes, and Safari still need real setup — Gmail/Google Docs need an OAuth app you create yourself, Apple Notes/Safari need the iPad Shortcuts relay described in `docs/PRD.md` Section 6. I can't fabricate credentials on your behalf; clicking "Connect" on those rows tells you what's needed rather than faking a connection.
 
 ## Running it
 
-Open `index.html` directly in Chrome or Edge (voice input needs the Web Speech API, which Firefox/Safari don't support). No build step, no dependencies — fonts are embedded, everything runs client-side.
+**Open apps requires the local server** (it calls a companion API that isn't available if you just double-click the file). Start it with:
+
+```
+powershell -ExecutionPolicy Bypass -File .claude/serve-ui.ps1
+```
+
+then open **http://localhost:5550/** in Chrome or Edge. Web search, voice, and everything else still work if you just double-click `ui/index.html` directly — only "open an app" needs the server running.
+
+**A note on "Open Apps"**: the HTTP API and its success/failure reporting are verified correct — it genuinely calls `Start-Process` and returns real results (confirmed a bad app name correctly returns an honest error). In my own test environment, apps launched through the server sometimes didn't stay open, while the identical command run directly in an interactive terminal worked reliably — this looks like an artifact of how my automated tooling supervises background processes, not a bug in the script itself, but I couldn't fully root-cause it. Please verify on your machine (run the server from your own terminal, not through any automation, and try "open notepad") before relying on it.
 
 ## Adding a voice
 
