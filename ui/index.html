@@ -924,6 +924,9 @@
 
   function respondTo(rawText) {
     var text = stripFiller(rawText);
+    if (text !== rawText.trim()) {
+      logEntry('system', 'Interpreted as: "' + text + '"');
+    }
     var lower = text.toLowerCase();
 
     if (/what.?s the time|what time is it/.test(lower)) {

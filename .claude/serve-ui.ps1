@@ -68,6 +68,7 @@ while ($listener.IsListening) {
     $relPath = $path.TrimStart('/')
     if ([string]::IsNullOrEmpty($relPath)) { $relPath = "index.html" }
     $filePath = Join-Path $root $relPath
+    $res.Headers.Add("Cache-Control", "no-store, no-cache, must-revalidate")
     if (Test-Path $filePath -PathType Leaf) {
         $bytes = [System.IO.File]::ReadAllBytes($filePath)
         if ($filePath -like "*.html") { $res.ContentType = "text/html; charset=utf-8" }
