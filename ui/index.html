@@ -191,6 +191,10 @@
     flex: 0 0 auto;
     box-shadow: 0 0 0 3px rgba(58,74,80,0.15);
   }
+  .status-dot.ok {
+    background: var(--state-ok);
+    box-shadow: 0 0 0 3px rgba(87,217,138,0.15);
+  }
   .integration-name {
     font-size: 13px;
     font-weight: 600;
@@ -311,6 +315,28 @@
     content: 'Press the mic, or say the wake word, to talk to KAAVIS.';
     color: var(--text-faint);
   }
+
+  .cmd-row {
+    display: flex;
+    gap: 8px;
+    width: min(100%, 420px);
+  }
+  .cmd-row input {
+    flex: 1;
+    min-width: 0;
+  }
+  .cmd-row button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+  }
+  .cmd-row button:hover { border-color: var(--accent-dim); color: var(--accent); }
 
   /* ---------- Log panel ---------- */
   .log {
@@ -529,6 +555,10 @@
       </div>
     </div>
     <p class="live-transcript" id="liveTranscript" aria-live="polite"></p>
+    <div class="cmd-row">
+      <input type="text" id="cmdInput" placeholder="Or type a command…" aria-label="Type a command to KAAVIS">
+      <button id="cmdSend" type="button">Send</button>
+    </div>
   </section>
 
   <section class="panel panel-log" aria-label="Action log">
@@ -639,12 +669,12 @@
 
   // ---------- Integrations ----------
   var INTEGRATIONS = [
-    { name: 'Email', detail: 'Needs Gmail OAuth (read-only to start)' },
-    { name: 'Word Files', detail: 'Needs a local folder to watch' },
-    { name: 'Google Docs', detail: 'Needs Google Drive/Docs OAuth' },
-    { name: 'Obsidian Vault', detail: 'Needs your vault folder path' },
-    { name: 'Apple Notes', detail: 'Needs iPad Shortcuts relay via iCloud Drive' },
-    { name: 'Safari (iPad)', detail: 'Needs iPad Shortcuts automation' }
+    { name: 'Email', detail: 'Needs Gmail OAuth (read-only to start)', keywords: ['email', 'gmail', 'inbox'] },
+    { name: 'Word Files', detail: 'Needs a local folder to watch', keywords: ['word', 'docx'] },
+    { name: 'Google Docs', detail: 'Needs Google Drive/Docs OAuth', keywords: ['google doc', 'google docs'] },
+    { name: 'Obsidian Vault', detail: 'Needs your vault folder path', keywords: ['obsidian', 'vault', 'note', 'notes'], id: 'obsidian' },
+    { name: 'Apple Notes', detail: 'Needs iPad Shortcuts relay via iCloud Drive', keywords: ['apple notes', 'icloud'] },
+    { name: 'Safari (iPad)', detail: 'Needs iPad Shortcuts automation', keywords: ['safari'] }
   ];
   var listEl = document.getElementById('integrationsList');
   INTEGRATIONS.forEach(function (item, idx) {
@@ -652,10 +682,10 @@
     li.className = 'integration-row';
     li.innerHTML =
       '<div class="integration-head">' +
-        '<span class="status-dot"></span>' +
+        '<span class="status-dot" id="dot-' + idx + '"></span>' +
         '<span class="integration-name">' + item.name + '</span>' +
       '</div>' +
-      '<div class="integration-detail">' + item.detail + '</div>' +
+      '<div class="integration-detail" id="detail-' + idx + '">' + item.detail + '</div>' +
       '<button class="connect-btn" type="button" data-idx="' + idx + '">Connect</button>' +
       '<div class="connect-note" id="note-' + idx + '"></div>';
     listEl.appendChild(li);
@@ -664,11 +694,26 @@
     if (!e.target.classList.contains('connect-btn')) return;
     var idx = e.target.getAttribute('data-idx');
     var item = INTEGRATIONS[idx];
+    if (item.id === 'obsidian') {
+      connectVault();
+      return;
+    }
     var note = document.getElementById('note-' + idx);
     note.textContent = 'Not connected yet — ' + item.detail.toLowerCase() + '.';
     note.classList.add('show');
     logEntry('action', 'Connect requested: ' + item.name + ' — ' + item.detail);
   });
+
+  function setIntegrationConnected(id, detailText) {
+    var idx = INTEGRATIONS.findIndex(function (i) { return i.id === id; });
+    if (idx < 0) return;
+    var dot = document.getElementById('dot-' + idx);
+    var detail = document.getElementById('detail-' + idx);
+    var btn = listEl.querySelector('button[data-idx="' + idx + '"]');
+    if (dot) dot.classList.add('ok');
+    if (detail) detail.textContent = detailText;
+    if (btn) btn.textContent = 'Reconnect';
+  }
 
   // ---------- Orb / pulse canvas ----------
   var canvas = document.getElementById('pulseCanvas');
@@ -798,20 +843,264 @@
     window.speechSynthesis.speak(utter);
   }
 
+  // ---------- Obsidian vault (File System Access API — no server, no OAuth) ----------
+  var vaultHandle = null;
+  var vaultConnected = false;
+
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open('kaavis', 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore('kv'); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbSet(key, value) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(value, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  function idbGet(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('kv', 'readonly');
+        var req = tx.objectStore('kv').get(key);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function connectVault() {
+    if (!window.showDirectoryPicker) {
+      logEntry('system', 'This browser doesn\'t support folder access (needs Chrome or Edge).');
+      return;
+    }
+    window.showDirectoryPicker({ id: 'kaavis-vault', mode: 'readwrite' }).then(function (handle) {
+      vaultHandle = handle;
+      vaultConnected = true;
+      idbSet('vaultHandle', handle);
+      setIntegrationConnected('obsidian', 'Connected — ' + handle.name);
+      logEntry('action', 'Obsidian Vault connected: ' + handle.name);
+      speak('Vault connected. I can read, search, and add to notes in ' + handle.name + ' now.');
+    }).catch(function (err) {
+      if (err.name !== 'AbortError') logEntry('system', 'Vault connection failed: ' + err.message);
+    });
+  }
+
+  function tryRestoreVault() {
+    idbGet('vaultHandle').then(function (handle) {
+      if (!handle) return;
+      return handle.queryPermission({ mode: 'readwrite' }).then(function (perm) {
+        if (perm === 'granted') {
+          vaultHandle = handle;
+          vaultConnected = true;
+          setIntegrationConnected('obsidian', 'Connected — ' + handle.name);
+          logEntry('system', 'Obsidian Vault reconnected: ' + handle.name);
+        } else {
+          var idx = INTEGRATIONS.findIndex(function (i) { return i.id === 'obsidian'; });
+          var detail = document.getElementById('detail-' + idx);
+          if (detail) detail.textContent = 'Previously connected to ' + handle.name + ' — click Connect to re-authorize';
+        }
+      });
+    }).catch(function () { /* no stored handle, or API unsupported */ });
+  }
+
+  function sanitizeNoteName(name) {
+    var n = name.trim().split('/').map(function (seg) {
+      return seg.trim().replace(/[\\:*?"<>|]/g, '');
+    }).filter(Boolean).join('/');
+    return /\.md$/i.test(n) ? n : n + '.md';
+  }
+
+  function getFolderHandle(path, create) {
+    var parts = path.split('/').map(function (p) { return p.trim(); }).filter(Boolean);
+    var cur = Promise.resolve(vaultHandle);
+    parts.forEach(function (part) {
+      cur = cur.then(function (dir) { return dir.getDirectoryHandle(part, { create: !!create }); });
+    });
+    return cur;
+  }
+
+  function listMarkdownFiles() {
+    var files = [];
+    function walk(dir, prefix) {
+      var iter = dir.entries();
+      function next() {
+        return iter.next().then(function (res) {
+          if (res.done) return;
+          var name = res.value[0], handle = res.value[1];
+          if (handle.kind === 'file' && /\.md$/i.test(name)) {
+            files.push(prefix + name);
+          } else if (handle.kind === 'directory') {
+            return walk(handle, prefix + name + '/').then(next);
+          }
+          return next();
+        });
+      }
+      return next();
+    }
+    return walk(vaultHandle, '').then(function () { return files; });
+  }
+
+  function readNoteContent(rawName) {
+    var name = sanitizeNoteName(rawName);
+    var parts = name.split('/');
+    var fileName = parts.pop();
+    var folderPath = parts.join('/');
+    return (folderPath ? getFolderHandle(folderPath, false) : Promise.resolve(vaultHandle))
+      .then(function (dir) { return dir.getFileHandle(fileName, { create: false }); })
+      .then(function (fh) { return fh.getFile(); })
+      .then(function (file) { return file.text(); });
+  }
+
+  function writeNoteContent(rawName, content, append) {
+    var name = sanitizeNoteName(rawName);
+    var parts = name.split('/');
+    var fileName = parts.pop();
+    var folderPath = parts.join('/');
+    return (folderPath ? getFolderHandle(folderPath, true) : Promise.resolve(vaultHandle))
+      .then(function (dir) { return dir.getFileHandle(fileName, { create: true }); })
+      .then(function (fh) {
+        if (!append) return { fh: fh, existing: '' };
+        return fh.getFile().then(function (file) { return file.text(); }).catch(function () { return ''; })
+          .then(function (existing) { return { fh: fh, existing: existing }; });
+      })
+      .then(function (res) {
+        var finalText = res.existing
+          ? res.existing.replace(/\s*$/, '') + '\n' + content + '\n'
+          : content + '\n';
+        return res.fh.createWritable().then(function (w) {
+          return w.write(finalText).then(function () { return w.close(); });
+        });
+      });
+  }
+
+  function searchVaultFor(query) {
+    var q = query.toLowerCase();
+    return listMarkdownFiles().then(function (files) {
+      return Promise.all(files.map(function (path) {
+        return readNoteContent(path).then(function (text) {
+          var hit = path.toLowerCase().indexOf(q) !== -1 || text.toLowerCase().indexOf(q) !== -1;
+          if (!hit) return null;
+          var idx = text.toLowerCase().indexOf(q);
+          var snippet = idx >= 0 ? text.slice(Math.max(0, idx - 30), idx + 60).trim() : text.slice(0, 60).trim();
+          return { path: path, snippet: snippet };
+        }).catch(function () { return null; });
+      }));
+    }).then(function (results) { return results.filter(Boolean); });
+  }
+
+  function parseVaultCommand(text) {
+    var m;
+    if ((m = text.match(/^create (?:a )?notes? (?:called |named )?["']?(.+?)["']? in ["']?(.+?)["']? (?:saying|with|containing) (.+)$/i))) {
+      return { type: 'create', name: m[1], folder: m[2], content: m[3] };
+    }
+    if ((m = text.match(/^create (?:a )?notes? (?:called |named )?["']?(.+?)["']? (?:saying|with|containing) (.+)$/i))) {
+      return { type: 'create', name: m[1], folder: '', content: m[2] };
+    }
+    if ((m = text.match(/^create (?:a )?notes?/i))) {
+      return { type: 'create-help' };
+    }
+    if ((m = text.match(/^(?:add|append) (.+?) to (?:my )?["']?(.+?)["']? note$/i))) {
+      return { type: 'append', name: m[2], content: m[1] };
+    }
+    if ((m = text.match(/^(?:read|what does) (?:my )?["']?(.+?)["']? note(?: say)?\??$/i))) {
+      return { type: 'read', name: m[1] };
+    }
+    if ((m = text.match(/^(?:search my vault for|what did i write about) ["']?(.+)$/i))) {
+      return { type: 'search', query: m[1] };
+    }
+    if (/^(?:list|what are)(?: my)? notes\??$/i.test(text)) {
+      return { type: 'list' };
+    }
+    return null;
+  }
+
+  function handleVaultCommand(cmd) {
+    if (cmd.type === 'create-help') {
+      speak('Tell me the note name and what to put in it — for example, "create a note called Groceries saying oat milk, batteries".');
+      return;
+    }
+    if (cmd.type === 'create') {
+      if (/summar/i.test(cmd.content)) {
+        speak('I can create that note, but summarizing needs a language-model backend that isn\'t connected yet — tell me exactly what to write instead.');
+        return;
+      }
+      var path = (cmd.folder ? cmd.folder.replace(/\/$/, '') + '/' : '') + cmd.name;
+      writeNoteContent(path, cmd.content, false).then(function () {
+        speak('Created ' + sanitizeNoteName(path) + '.');
+      }).catch(function (err) { speak('Couldn\'t create that note: ' + err.message); });
+      return;
+    }
+    if (cmd.type === 'append') {
+      writeNoteContent(cmd.name, cmd.content, true).then(function () {
+        speak('Added that to ' + sanitizeNoteName(cmd.name) + '.');
+      }).catch(function (err) { speak('Couldn\'t find or update that note: ' + err.message); });
+      return;
+    }
+    if (cmd.type === 'read') {
+      readNoteContent(cmd.name).then(function (text) {
+        var words = text.trim().split(/\s+/).slice(0, 40).join(' ');
+        speak(sanitizeNoteName(cmd.name) + ' says: ' + (words || '(empty note)'));
+      }).catch(function () { speak('I couldn\'t find a note called ' + cmd.name + '.'); });
+      return;
+    }
+    if (cmd.type === 'search') {
+      searchVaultFor(cmd.query).then(function (matches) {
+        if (!matches.length) { speak('No notes mention "' + cmd.query + '".'); return; }
+        var names = matches.slice(0, 5).map(function (m) { return m.path; }).join(', ');
+        matches.forEach(function (m) { logEntry('action', m.path + ': ...' + m.snippet + '...'); });
+        speak('Found ' + matches.length + ' note' + (matches.length === 1 ? '' : 's') + ' mentioning "' + cmd.query + '": ' + names + '.');
+      }).catch(function (err) { speak('Vault search failed: ' + err.message); });
+      return;
+    }
+    if (cmd.type === 'list') {
+      listMarkdownFiles().then(function (files) {
+        if (!files.length) { speak('Your vault has no notes yet.'); return; }
+        speak('Your vault has ' + files.length + ' note' + (files.length === 1 ? '' : 's') + '.');
+        logEntry('action', 'Notes: ' + files.join(', '));
+      }).catch(function (err) { speak('Couldn\'t list notes: ' + err.message); });
+      return;
+    }
+  }
+
   // ---------- Command handling ----------
   function respondTo(text) {
     var lower = text.toLowerCase();
-    var matched = INTEGRATIONS.find(function (item) {
-      return lower.indexOf(item.name.toLowerCase().split(' ')[0]) !== -1;
-    });
+
     if (/what.?s the time|what time is it/.test(lower)) {
       var d = new Date();
       var pad = function (n) { return String(n).padStart(2, '0'); };
       speak('It is ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '.');
       return;
     }
+
+    var vaultCmd = parseVaultCommand(text);
+    if (vaultCmd) {
+      if (!vaultConnected) {
+        speak('Obsidian Vault isn\'t connected yet — needs your vault folder path. Hit Connect on the Obsidian Vault row first.');
+        return;
+      }
+      handleVaultCommand(vaultCmd);
+      return;
+    }
+
+    var matched = INTEGRATIONS.find(function (item) {
+      var keys = item.keywords || [item.name.toLowerCase().split(' ')[0]];
+      return keys.some(function (k) { return lower.indexOf(k) !== -1; });
+    });
     if (matched) {
-      speak(matched.name + ' isn\'t connected yet. ' + matched.detail + '.');
+      if (matched.id === 'obsidian' && vaultConnected) {
+        speak('The vault is connected — try asking me to read, search, list, create, or add to a note.');
+      } else {
+        speak(matched.name + ' isn\'t connected yet. ' + matched.detail + '.');
+      }
       return;
     }
     var generic = [
@@ -940,9 +1229,25 @@
     else stopAmplitudeMeter();
   };
 
+  // ---------- Typed command fallback ----------
+  var cmdInput = document.getElementById('cmdInput');
+  var cmdSend = document.getElementById('cmdSend');
+  function submitCmd() {
+    var text = cmdInput.value.trim();
+    if (!text) return;
+    logEntry('user', text);
+    respondTo(text);
+    cmdInput.value = '';
+  }
+  cmdSend.addEventListener('click', submitCmd);
+  cmdInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') submitCmd();
+  });
+
   // ---------- Boot ----------
   logEntry('system', 'KAAVIS voice shell initialized.');
   logEntry('system', 'No integrations connected. See the panel on the left for what each one needs.');
+  tryRestoreVault();
 })();
 </script>
 
