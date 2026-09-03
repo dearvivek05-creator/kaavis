@@ -1,0 +1,578 @@
+<title>TTUM Generator Requirements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F5F6F8; --surface:#FFFFFF; --surface-2:#EFF2F6;
+  --ink:#16212E; --ink-2:#42505F; --muted:#6E7887;
+  --rule:#DBE1E9; --rule-strong:#C2CBD6;
+  --accent:#1F3355; --accent-ink:#1F3355; --accent-soft:#E7EDF6;
+  --debit:#9C3D1E; --debit-soft:#F7E9E2;
+  --credit:#12695A; --credit-soft:#E2F0EC;
+  --warn:#7E5A00; --warn-soft:#FBF0D2;
+  --shadow:0 1px 2px rgba(22,33,46,.05), 0 8px 24px -16px rgba(22,33,46,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F141A; --surface:#161C24; --surface-2:#1D242E;
+    --ink:#E4E9EF; --ink-2:#B4BEC9; --muted:#8B95A3;
+    --rule:#27303B; --rule-strong:#39434F;
+    --accent:#8FB0DE; --accent-ink:#A9C4E9; --accent-soft:#1B2634;
+    --debit:#E09570; --debit-soft:#2C2019;
+    --credit:#6FC7B2; --credit-soft:#152722;
+    --warn:#DFB863; --warn-soft:#26210F;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F141A; --surface:#161C24; --surface-2:#1D242E;
+  --ink:#E4E9EF; --ink-2:#B4BEC9; --muted:#8B95A3;
+  --rule:#27303B; --rule-strong:#39434F;
+  --accent:#8FB0DE; --accent-ink:#A9C4E9; --accent-soft:#1B2634;
+  --debit:#E09570; --debit-soft:#2C2019;
+  --credit:#6FC7B2; --credit-soft:#152722;
+  --warn:#DFB863; --warn-soft:#26210F;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:0 24px 96px}
+
+/* ---------- masthead ---------- */
+header.masthead{border-bottom:1px solid var(--rule); padding:56px 0 30px; margin-bottom:44px}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.7rem; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--accent-ink); margin:0 0 14px
+}
+h1{
+  font-family:Spectral,Georgia,serif; font-weight:500; font-size:clamp(2.1rem,4.4vw,3rem);
+  line-height:1.1; letter-spacing:-.015em; margin:0 0 12px; text-wrap:balance; max-width:20ch
+}
+.standfirst{font-size:1.08rem; color:var(--ink-2); margin:0; max-width:62ch}
+.meta{
+  display:flex; flex-wrap:wrap; gap:0 34px; margin-top:26px;
+  font-size:.82rem; color:var(--muted)
+}
+.meta div{display:flex; gap:8px; align-items:baseline}
+.meta dt{
+  font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted)
+}
+.meta dd{margin:0; color:var(--ink-2); font-weight:500}
+
+/* ---------- layout ---------- */
+.cols{display:block}
+@media (min-width:1020px){
+  .cols{display:grid; grid-template-columns:200px minmax(0,1fr); gap:56px; align-items:start}
+  nav.toc{position:sticky; top:28px; max-height:calc(100vh - 56px); overflow-y:auto}
+}
+nav.toc{font-size:.83rem; margin-bottom:44px}
+nav.toc p{
+  font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted); margin:0 0 12px
+}
+nav.toc ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px}
+nav.toc a{
+  color:var(--ink-2); text-decoration:none; display:grid;
+  grid-template-columns:20px 1fr; gap:8px; line-height:1.35
+}
+nav.toc a span{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--muted)}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc a:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+
+main{min-width:0}
+section{margin-bottom:60px; scroll-margin-top:24px}
+h2{
+  font-family:Spectral,Georgia,serif; font-weight:500; font-size:1.62rem; line-height:1.2;
+  letter-spacing:-.01em; margin:0 0 6px; text-wrap:balance;
+  display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:baseline
+}
+h2 .num{
+  font-family:"IBM Plex Mono",monospace; font-size:.82rem; font-weight:500;
+  color:var(--accent-ink); letter-spacing:.04em
+}
+.rule{height:1px; background:var(--rule); margin:14px 0 22px}
+h3{
+  font-size:.95rem; font-weight:600; letter-spacing:.005em; margin:30px 0 10px; color:var(--ink)
+}
+p{margin:0 0 14px; max-width:68ch}
+ul,ol.plain{margin:0 0 14px; padding-left:20px; max-width:68ch}
+li{margin-bottom:6px}
+strong{font-weight:600}
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.86em;
+  background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)
+}
+a{color:var(--accent-ink)}
+
+/* ---------- requirement blocks ---------- */
+.reqs{display:flex; flex-direction:column; gap:0; margin-top:4px}
+.req{
+  display:grid; grid-template-columns:76px minmax(0,1fr); gap:18px;
+  padding:16px 0; border-top:1px solid var(--rule)
+}
+.req:last-child{border-bottom:1px solid var(--rule)}
+.rid{
+  font-family:"IBM Plex Mono",monospace; font-size:.74rem; font-weight:500;
+  color:var(--accent-ink); letter-spacing:.04em; padding-top:2px
+}
+.req h4{margin:0 0 5px; font-size:.95rem; font-weight:600}
+.req p{margin:0; font-size:.93rem; color:var(--ink-2); max-width:64ch}
+
+/* ---------- tables ---------- */
+.scroll{overflow-x:auto; margin:0 0 16px; border:1px solid var(--rule); border-radius:5px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:.88rem; min-width:520px}
+th,td{padding:9px 14px; text-align:left; border-bottom:1px solid var(--rule); vertical-align:top}
+thead th{
+  font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); font-weight:500;
+  background:var(--surface-2); white-space:nowrap
+}
+tbody tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.num{text-align:right; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+
+/* ---------- the record byte map ---------- */
+.recordwrap{overflow-x:auto; border:1px solid var(--rule); border-radius:5px; background:var(--surface); padding:18px}
+.record{font-family:"IBM Plex Mono",monospace; font-size:.72rem; white-space:pre; line-height:1.5; display:inline-block}
+.record .seg{padding:3px 0; border-radius:2px}
+.f-acct{background:var(--accent-soft); color:var(--ink)}
+.f-date{background:var(--credit-soft); color:var(--ink)}
+.f-amt{background:var(--warn-soft); color:var(--ink)}
+.f-type{background:var(--debit-soft); color:var(--debit); font-weight:500}
+.f-narr{background:var(--accent-soft); color:var(--ink)}
+.f-fill{background:var(--surface-2); color:var(--muted)}
+.ruler{
+  font-family:"IBM Plex Mono",monospace; font-size:.66rem; color:var(--muted);
+  white-space:pre; display:inline-block; margin-bottom:5px; letter-spacing:0
+}
+.legend{
+  display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:14px;
+  font-size:.74rem; color:var(--muted)
+}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.swatch{width:11px; height:11px; border-radius:2px; display:inline-block; border:1px solid var(--rule-strong)}
+
+/* ---------- callouts ---------- */
+.note{
+  border-left:2px solid var(--accent); background:var(--surface); padding:14px 18px;
+  margin:18px 0; border-radius:0 4px 4px 0; box-shadow:var(--shadow); max-width:74ch
+}
+.note.flag{border-left-color:var(--warn)}
+.note p{margin:0; font-size:.92rem; color:var(--ink-2)}
+.note p + p{margin-top:9px}
+.note .tag{
+  display:block; font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:6px
+}
+
+/* ---------- flow ---------- */
+.flow{display:flex; flex-direction:column; gap:0; margin:6px 0 18px; counter-reset:step}
+.step{
+  display:grid; grid-template-columns:26px minmax(0,1fr); gap:16px;
+  padding:12px 0; border-top:1px solid var(--rule)
+}
+.step:last-child{border-bottom:1px solid var(--rule)}
+.step .n{
+  font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:var(--muted);
+  font-variant-numeric:tabular-nums; padding-top:2px
+}
+.step div p{margin:0; font-size:.93rem; color:var(--ink-2); max-width:62ch}
+.step div b{color:var(--ink); font-weight:600}
+
+/* ---------- status chips ---------- */
+.chip{
+  display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:.66rem;
+  letter-spacing:.08em; text-transform:uppercase; padding:2px 7px; border-radius:3px;
+  border:1px solid var(--rule-strong); color:var(--muted); white-space:nowrap
+}
+.chip.done{background:var(--credit-soft); color:var(--credit); border-color:transparent}
+.chip.open{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+
+footer{border-top:1px solid var(--rule); margin-top:20px; padding-top:22px; font-size:.82rem; color:var(--muted)}
+footer p{max-width:68ch}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Product Requirements &middot; Settlement Operations</p>
+  <h1>TTUM Daily Generator</h1>
+  <p class="standfirst">An Excel utility that turns each day&rsquo;s PROPELG settlement figures &mdash; typed by hand or read from the settlement system&rsquo;s file &mdash; into the bank&rsquo;s fixed-width TTUM upload file, without anyone counting characters.</p>
+  <dl class="meta">
+    <div><dt>Status</dt><dd>Built &amp; in acceptance</dd></div>
+    <div><dt>Version</dt><dd>1.0</dd></div>
+    <div><dt>Owner</dt><dd>Settlement Operations</dd></div>
+    <div><dt>Updated</dt><dd>3 September 2026</dd></div>
+  </dl>
+</header>
+
+<div class="cols">
+
+<nav class="toc" aria-label="Sections">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#s1"><span>1</span>Summary</a></li>
+    <li><a href="#s2"><span>2</span>Background</a></li>
+    <li><a href="#s3"><span>3</span>Goals &amp; non-goals</a></li>
+    <li><a href="#s4"><span>4</span>Users</a></li>
+    <li><a href="#s5"><span>5</span>The record</a></li>
+    <li><a href="#s6"><span>6</span>Domain rules</a></li>
+    <li><a href="#s7"><span>7</span>Requirements</a></li>
+    <li><a href="#s8"><span>8</span>Validation</a></li>
+    <li><a href="#s9"><span>9</span>Workbook</a></li>
+    <li><a href="#s10"><span>10</span>Flows</a></li>
+    <li><a href="#s11"><span>11</span>Configuration</a></li>
+    <li><a href="#s12"><span>12</span>Non-functional</a></li>
+    <li><a href="#s13"><span>13</span>Verification</a></li>
+    <li><a href="#s14"><span>14</span>Open questions</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2><span class="num">1</span>Summary</h2>
+  <div class="rule"></div>
+  <p>Every business day, settlement figures for the PROPELG portfolio have to reach the bank as a TTUM upload file: nine transactions laid out in fixed-width records of exactly 186 characters, where a single misplaced digit is a failed upload or a misposted entry.</p>
+  <p>This utility is a macro-enabled Excel workbook. The operator sets a date, gets the day&rsquo;s amounts in &mdash; by typing them or by importing the settlement system&rsquo;s own file &mdash; and clicks one button. The workbook lays out every record to the bank&rsquo;s specification, refuses to write a file that does not balance or will not fit its fields, and keeps a log of what was produced.</p>
+  <p>It runs entirely on the operator&rsquo;s machine, needs no network, no add-ins and no server, and carries a formula-only fallback for environments where macros are blocked.</p>
+</section>
+
+<section id="s2">
+  <h2><span class="num">2</span>Background</h2>
+  <div class="rule"></div>
+  <p>The TTUM file is produced daily and is unforgiving: fields are positional, amounts are in paise with no decimal point, dates repeat in two different shapes, and more than a third of every record is padding. Preparing it by hand in a text editor is slow and error-prone, and an error is only discovered when the bank rejects the upload &mdash; or worse, accepts it.</p>
+  <p>Two source documents defined the target: the bank&rsquo;s written specification, and a real file the bank had already accepted.</p>
+  <div class="note flag">
+    <p><span class="tag">Finding &mdash; specification vs. reality</span>The field lengths in the specification sheet sum to <strong>172</strong> characters, but every record in the accepted file is <strong>186</strong>. The difference is the trailing filler: the spec says 56 characters, the real file carries 70. Every other field matches the spec exactly.</p>
+    <p>The utility is built to the accepted file, on the grounds that the bank&rsquo;s parser is the authority and that file demonstrably passed it. This should be confirmed with the bank so the specification can be corrected.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">3</span>Goals &amp; non-goals</h2>
+  <div class="rule"></div>
+  <h3>Goals</h3>
+  <div class="reqs">
+    <div class="req"><div class="rid">G1</div><div>
+      <h4>A correct file, every day, without character counting</h4>
+      <p>The operator supplies amounts and a date. Positions, padding, paise and date formats are the utility&rsquo;s problem, never the operator&rsquo;s.</p></div></div>
+    <div class="req"><div class="rid">G2</div><div>
+      <h4>Two ways in, one way out</h4>
+      <p>Amounts can be typed or imported from the settlement file, and the two can be mixed. Everything after that &mdash; checks, preview, generation, logging &mdash; is identical.</p></div></div>
+    <div class="req"><div class="rid">G3</div><div>
+      <h4>Wrong files are refused, not warned about</h4>
+      <p>An out-of-balance day, an overlong narration or a blank amount stops generation outright. The operator is shown exactly which row is at fault.</p></div></div>
+    <div class="req"><div class="rid">G4</div><div>
+      <h4>Nothing hidden</h4>
+      <p>The exact records can be inspected before any file is written, and every file produced is logged with its date, totals and path.</p></div></div>
+    <div class="req"><div class="rid">G5</div><div>
+      <h4>Survives a locked-down desktop</h4>
+      <p>Where macros are blocked by policy, the same records are still obtainable from the workbook using worksheet formulas alone.</p></div></div>
+  </div>
+
+  <h3>Non-goals</h3>
+  <ul>
+    <li>No connection to the bank. The utility writes a file; uploading it stays a manual, separately controlled step.</li>
+    <li>No accounting logic. It does not calculate commission, GST or net settlement &mdash; those figures arrive already computed.</li>
+    <li>No multi-entity or multi-portfolio support in v1. The row template is PROPELG&rsquo;s.</li>
+    <li>No reconciliation against bank statements or ledgers.</li>
+    <li>No server, database, scheduler or unattended operation. A person triggers every run.</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2><span class="num">4</span>Users</h2>
+  <div class="rule"></div>
+  <p><strong>The settlement operator</strong> is the only daily user: a finance or operations colleague, fluent in Excel, not a developer, working on a managed Windows desktop. They run the utility once a day under time pressure, and they carry the consequence of an error. The design assumes they will not read documentation before clicking, so the workbook explains itself on the sheet.</p>
+  <p><strong>A reviewer or auditor</strong> is an occasional user, needing to answer &ldquo;what was sent on the 3rd, and who sent it?&rdquo; from the workbook alone.</p>
+</section>
+
+<section id="s5">
+  <h2><span class="num">5</span>The record</h2>
+  <div class="rule"></div>
+  <p>Records are 186 characters, separated by CR&nbsp;LF, with no line break after the last one. Below is a real record from the accepted file &mdash; &#8377;200.00 debited for VI settlement on 15 July 2026 &mdash; coloured by field. The padding is shown at full width because it is two-thirds of the record.</p>
+  <div class="recordwrap">
+    <div class="ruler">1             15      23                     46        56                        82                                 117</div>
+    <div class="record"><span class="seg f-acct">00993562511731</span><span class="seg f-date">15072026</span><span class="seg f-amt">00000000000000000020000</span><span class="seg f-type">D</span><span class="seg f-date">015072026</span><span class="seg f-fill">                          </span><span class="seg f-narr">PROPELG VI settlement 150726       </span><span class="seg f-fill">                                                                      </span></div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--accent-soft)"></i>Account &amp; narration</span>
+      <span><i class="swatch" style="background:var(--credit-soft)"></i>Value date</span>
+      <span><i class="swatch" style="background:var(--warn-soft)"></i>Amount in paise</span>
+      <span><i class="swatch" style="background:var(--debit-soft)"></i>Dr / Cr</span>
+      <span><i class="swatch" style="background:var(--surface-2)"></i>Filler</span>
+    </div>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="mono">Columns</th><th>Field</th><th class="mono">Len</th><th>Content</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1&ndash;14</td><td>Account number</td><td class="num">14</td><td>Left justified, padded right with spaces</td></tr>
+        <tr><td class="mono">15&ndash;22</td><td>Value date</td><td class="num">8</td><td><code>DDMMYYYY</code></td></tr>
+        <tr><td class="mono">23&ndash;45</td><td>Amount</td><td class="num">23</td><td>Whole paise, padded left with zeros. <code>20000</code> is &#8377;200.00</td></tr>
+        <tr><td class="mono">46</td><td>Transaction type</td><td class="num">1</td><td><code>D</code> debit or <code>C</code> credit</td></tr>
+        <tr><td class="mono">47&ndash;55</td><td>Value date, again</td><td class="num">9</td><td><code>0</code> followed by <code>DDMMYYYY</code></td></tr>
+        <tr><td class="mono">56&ndash;81</td><td>Filler</td><td class="num">26</td><td>Spaces</td></tr>
+        <tr><td class="mono">82&ndash;116</td><td>Narration</td><td class="num">35</td><td>Left justified, padded right with spaces</td></tr>
+        <tr><td class="mono">117&ndash;186</td><td>Filler</td><td class="num">70</td><td>Spaces</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">6</span>Domain rules</h2>
+  <div class="rule"></div>
+
+  <h3>Amounts are keyed in paise</h3>
+  <p>The settlement report gives figures with the paise as the last two digits and no decimal point, so that is what the operator types: <code>47400</code> means &#8377;474.00. The sheet shows a live <em>Reads as (INR)</em> column beside each entry so the decimal point is never in doubt, and a fractional entry is rejected rather than guessed at. A configuration setting switches the column to rupees for anyone who prefers <code>474.00</code>.</p>
+
+  <h3>Two dates, and they differ</h3>
+  <p>The <strong>value date</strong> is carried inside every record, twice. The <strong>file-name date</strong> is what the file is called. In the bank&rsquo;s accepted example these differ by one day &mdash; records dated 15 July in a file named for 16 July &mdash; so the offset is a setting, defaulting to one day, and the resolved file name is shown on screen before generation.</p>
+
+  <h3>The day must balance</h3>
+  <p>Total debits must equal total credits. Both sample days do so exactly, and the balancing entry is the net settlement line. This is treated as a hard rule: an unbalanced day blocks generation by default, and the running difference is displayed while amounts are entered.</p>
+
+  <h3>Narrations are templates</h3>
+  <p>A narration is stored with date placeholders &mdash; <code>{DDMMYY}</code>, <code>{DDMMYYYY}</code>, <code>{DD}</code>, <code>{MM}</code>, <code>{YY}</code>, <code>{YYYY}</code> &mdash; resolved against the value date at generation. <code>PROPELG VI settlement {DDMMYY}</code> becomes <code>PROPELG VI settlement 150726</code>, so no date is ever retyped.</p>
+
+  <h3>The nine standard lines</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Line</th><th class="mono">Account</th><th>Dr/Cr</th><th class="mono">Import match text</th></tr></thead>
+      <tbody>
+        <tr><td>VI settlement</td><td class="mono">00993562511731</td><td>D</td><td class="mono">VI settlement</td></tr>
+        <tr><td>MC settlement</td><td class="mono">00993562511732</td><td>D</td><td class="mono">MC settlement</td></tr>
+        <tr><td>MC commission received</td><td class="mono">00993564610119</td><td>C</td><td class="mono">MC comm recd</td></tr>
+        <tr><td>VI commission received</td><td class="mono">00993564610122</td><td>C</td><td class="mono">VI comm recd</td></tr>
+        <tr><td>MC GST on commission</td><td class="mono">00993564610119</td><td>C</td><td class="mono">MC GST comm recd</td></tr>
+        <tr><td>VI GST on commission</td><td class="mono">00993564610122</td><td>C</td><td class="mono">VI GST comm recd</td></tr>
+        <tr><td>MC Non-GST commission</td><td class="mono">00993564610119</td><td>C</td><td class="mono">MC Non GST comm recd</td></tr>
+        <tr><td>VI Non-GST commission</td><td class="mono">00993564610122</td><td>C</td><td class="mono">VI Non GST comm recd</td></tr>
+        <tr><td>Net settlement to Prp India</td><td class="mono">200999103427</td><td>C</td><td class="mono">Nodal</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The match keys carry their full wording deliberately: <code>MC comm recd</code> must not also claim <code>MC GST comm recd</code>. Rows are operator-editable, and the sheet holds a hundred of them, so lines can be added without code changes.</p>
+</section>
+
+<section id="s7">
+  <h2><span class="num">7</span>Functional requirements</h2>
+  <div class="rule"></div>
+  <div class="reqs">
+    <div class="req"><div class="rid">FR-1</div><div>
+      <h4>Date selection</h4>
+      <p>The value date defaults to the system date and accepts any date typed over it. The file-name date follows at a configurable offset and is itself editable. Both are visible before generation.</p></div></div>
+    <div class="req"><div class="rid">FR-2</div><div>
+      <h4>Manual entry</h4>
+      <p>A hundred-row grid holding include flag, description, account number, Dr/Cr, amount and narration template, pre-loaded with the nine standard lines. Dropdowns constrain the include and Dr/Cr columns; account numbers are held as text so leading zeros survive.</p></div></div>
+    <div class="req"><div class="rid">FR-3</div><div>
+      <h4>Import from the settlement file</h4>
+      <p>Reads the newest file matching a pattern from a designated folder, or a file the operator picks. The settlement file uses the same 186-character layout, so the same field positions parse it.</p></div></div>
+    <div class="req"><div class="rid">FR-4</div><div>
+      <h4>Import summary before any change</h4>
+      <p>A summary shows the file name, value date, record count, how many lines matched, every matched amount, and the debit/credit totals with their difference. Declining leaves the sheet exactly as it was.</p></div></div>
+    <div class="req"><div class="rid">FR-5</div><div>
+      <h4>Import takes figures only</h4>
+      <p>Only the amount and the Dr/Cr flag come from the file. Account numbers and narrations always come from the entry sheet &mdash; which is what keeps the net settlement line correct, since the settlement file books it to the nodal account while the TTUM must carry the Prp India account.</p></div></div>
+    <div class="req"><div class="rid">FR-6</div><div>
+      <h4>Import leaves nothing stale</h4>
+      <p>Rows with a match key that the file did not mention are cleared and excluded, so a previous day&rsquo;s figure cannot survive. Rows with no match key are untouched, so anything maintained by hand persists across imports.</p></div></div>
+    <div class="req"><div class="rid">FR-7</div><div>
+      <h4>Unmatched lines cannot slip through</h4>
+      <p>A line matching no row, or matching more than one, is reported and left out. That leaves the day out of balance, which blocks generation &mdash; so silently dropping a transaction is not a reachable outcome.</p></div></div>
+    <div class="req"><div class="rid">FR-8</div><div>
+      <h4>Preview</h4>
+      <p>The exact records can be rendered on screen, character for character, with their lengths, without writing anything to disk.</p></div></div>
+    <div class="req"><div class="rid">FR-9</div><div>
+      <h4>Generation</h4>
+      <p>Writes ASCII, CR&nbsp;LF separated records with no trailing line break by default. An existing file of the same name is never replaced without asking.</p></div></div>
+    <div class="req"><div class="rid">FR-10</div><div>
+      <h4>Output location</h4>
+      <p>A folder is typed, pasted or chosen through a picker, and defaults to a folder beside the workbook. Missing folders are created. The resolved file name is shown live as the date changes.</p></div></div>
+    <div class="req"><div class="rid">FR-11</div><div>
+      <h4>Audit log</h4>
+      <p>Every generated file adds a row recording timestamp, value date, file date, file name, record count, both totals, the balance state, the Windows user and the full path.</p></div></div>
+    <div class="req"><div class="rid">FR-12</div><div>
+      <h4>Macro-free fallback</h4>
+      <p>A sheet builds the same 186-character records using worksheet formulas alone, for copying into a text editor. A second sheet parses a pasted settlement file the same way. Both work with macros fully disabled.</p></div></div>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">8</span>Validation</h2>
+  <div class="rule"></div>
+  <p>Checks run before anything is written. Failing cells are highlighted on the entry sheet and named in a single message; no partial file is ever produced.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="mono">ID</th><th>Rule</th><th>On failure</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">VR-1</td><td>Total debits equal total credits</td><td>Blocks generation. Configurable to warn-and-continue instead</td></tr>
+        <tr><td class="mono">VR-2</td><td>Account number is present and at most 14 characters</td><td>Blocks, names the row</td></tr>
+        <tr><td class="mono">VR-3</td><td>Dr/Cr is <code>D</code> or <code>C</code></td><td>Blocks, names the row</td></tr>
+        <tr><td class="mono">VR-4</td><td>Amount is present, numeric and greater than zero</td><td>Blocks, distinguishing blank from non-numeric</td></tr>
+        <tr><td class="mono">VR-5</td><td>Amount is a whole number when keyed in paise</td><td>Blocks &mdash; a decimal here is ambiguous, not roundable</td></tr>
+        <tr><td class="mono">VR-6</td><td>Amount fits the 23-digit field</td><td>Blocks</td></tr>
+        <tr><td class="mono">VR-7</td><td>Narration is present and at most 35 characters after date substitution</td><td>Blocks &mdash; never silently truncated</td></tr>
+        <tr><td class="mono">VR-8</td><td>Every assembled record is exactly 186 characters</td><td>Aborts generation &mdash; a last-line defence against a layout change</td></tr>
+        <tr><td class="mono">VR-9</td><td>The value date is a valid date</td><td>Blocks</td></tr>
+        <tr><td class="mono">VR-10</td><td>Output file does not already exist</td><td>Asks before replacing</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">9</span>Workbook structure</h2>
+  <div class="rule"></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Sheet</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Dashboard</strong></td><td>Dates, output folder, live totals, status line, and the nine action buttons</td></tr>
+        <tr><td><strong>Entries</strong></td><td>The daily grid, 100 rows, with the running debit/credit banner</td></tr>
+        <tr><td><strong>Import</strong></td><td>The last settlement file line by line, with each field pulled out and the row it matched</td></tr>
+        <tr><td><strong>Text&nbsp;Output</strong></td><td>The same records built by formula &mdash; the macro-free route</td></tr>
+        <tr><td><strong>Config</strong></td><td>Eight settings that rarely change</td></tr>
+        <tr><td><strong>Log</strong></td><td>One row per generated file</td></tr>
+        <tr><td><strong>Layout</strong></td><td>The record specification and the bank&rsquo;s file as a worked example</td></tr>
+        <tr><td><strong>Setup</strong></td><td>What to try when a button does nothing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Cells are addressed through named ranges rather than fixed positions, so the sheets can be re-laid-out without touching the code. The macro source is a single module of roughly 1,240 lines.</p>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span>Operator flows</h2>
+  <div class="rule"></div>
+  <h3>Import route</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><p><b>Open the workbook.</b> Today&rsquo;s date is already in place.</p></div></div>
+    <div class="step"><div class="n">2</div><div><p><b>Import Latest Input File.</b> The newest matching file is read from the designated folder.</p></div></div>
+    <div class="step"><div class="n">3</div><div><p><b>Read the summary.</b> Value date, record count, every matched amount, and whether the day balances. Decline and nothing changes.</p></div></div>
+    <div class="step"><div class="n">4</div><div><p><b>Accept.</b> Amounts land on the entry sheet, the value date is taken from the file, and the operator is returned to the dashboard.</p></div></div>
+    <div class="step"><div class="n">5</div><div><p><b>Check the totals, then Generate.</b> The file is written and logged.</p></div></div>
+  </div>
+  <h3>Manual route</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><p><b>Set the date</b> if it is not today.</p></div></div>
+    <div class="step"><div class="n">2</div><div><p><b>Type the amounts</b> against the nine standard lines, adjusting Dr/Cr where the day&rsquo;s flow differs. The banner turns green when the day balances.</p></div></div>
+    <div class="step"><div class="n">3</div><div><p><b>Generate.</b> Identical from here on.</p></div></div>
+  </div>
+  <p>The two mix freely: an imported day can be adjusted by hand before generating, and rows without a match key are never disturbed by an import.</p>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11</span>Configuration</h2>
+  <div class="rule"></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Setting</th><th class="mono">Default</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Amount column is entered as</td><td class="mono">Paise</td><td>Whether a keyed figure carries its paise as the last two digits, or is a rupee amount</td></tr>
+        <tr><td>File name pattern</td><td class="mono">PROPELG_TTUM_{DDMMYYYY}.txt</td><td>Date tokens resolve against the file-name date</td></tr>
+        <tr><td>File-name date offset</td><td class="mono">1</td><td>Days between the value date and the date in the file name</td></tr>
+        <tr><td>Block when out of balance</td><td class="mono">Yes</td><td>Whether an unbalanced day stops generation or merely warns</td></tr>
+        <tr><td>Line break after last record</td><td class="mono">No</td><td>Matches the bank&rsquo;s accepted file, which ends at the last character</td></tr>
+        <tr><td>Input folder</td><td class="mono">&mdash;</td><td>Where the settlement file arrives. Blank means the operator is asked each time</td></tr>
+        <tr><td>Input file name pattern</td><td class="mono">NET_MERPAY_PROPELG*.txt</td><td>Which files in that folder count as settlement files</td></tr>
+        <tr><td>Imported file sets the value date</td><td class="mono">Yes</td><td>Whether the file&rsquo;s own date overrides the dashboard</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s12">
+  <h2><span class="num">12</span>Non-functional requirements</h2>
+  <div class="rule"></div>
+  <div class="reqs">
+    <div class="req"><div class="rid">NFR-1</div><div>
+      <h4>Environment</h4>
+      <p>Microsoft Excel on Windows, 2010 or later. No add-ins, no references beyond those Excel ships with, no installer, no server. The workbook is a single file that can be copied between machines.</p></div></div>
+    <div class="req"><div class="rid">NFR-2</div><div>
+      <h4>Offline by construction</h4>
+      <p>No network calls, no credentials, no external services. Inputs and outputs are local files.</p></div></div>
+    <div class="req"><div class="rid">NFR-3</div><div>
+      <h4>Exact money arithmetic</h4>
+      <p>Amount conversion uses fixed-point currency arithmetic, not floating point, so no rounding drift can reach a settlement figure.</p></div></div>
+    <div class="req"><div class="rid">NFR-4</div><div>
+      <h4>Byte-level output control</h4>
+      <p>The file is written as raw bytes rather than through text output, so line endings and the absence of a trailing break are exactly as intended.</p></div></div>
+    <div class="req"><div class="rid">NFR-5</div><div>
+      <h4>Speed</h4>
+      <p>A day&rsquo;s import, validation and generation complete in well under a second at the working volume of nine to a hundred records.</p></div></div>
+    <div class="req"><div class="rid">NFR-6</div><div>
+      <h4>Degrades rather than fails</h4>
+      <p>Buttons are stored in the file so they are visible before macros run; if macros are blocked the formula route still produces the records; if the macro project fails to load it can be imported by hand in about a minute.</p></div></div>
+    <div class="req"><div class="rid">NFR-7</div><div>
+      <h4>Maintainable without a developer</h4>
+      <p>Rows, accounts, narrations, match keys, file naming and folders are all sheet data. Code changes are needed only if the bank changes the record layout.</p></div></div>
+  </div>
+</section>
+
+<section id="s13">
+  <h2><span class="num">13</span>Verification</h2>
+  <div class="rule"></div>
+  <p>The workbook is generated from source by a build script, and four automated tests run against the built file. All four pass.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Test</th><th>What it proves</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">test_reference</td><td>The layout rebuilds the bank&rsquo;s accepted file byte for byte &mdash; 1,690 bytes, 9 records</td><td><span class="chip done">Pass</span></td></tr>
+        <tr><td class="mono">test_workbook</td><td>The shipped rows and settings reproduce that same file, so the workbook&rsquo;s own content is correct, not just the constants</td><td><span class="chip done">Pass</span></td></tr>
+        <tr><td class="mono">test_import</td><td>The real settlement file parses, all 9 lines match 1:1, the day balances at &#8377;78,386,928.00, and a valid file is produced</td><td><span class="chip done">Pass</span></td></tr>
+        <tr><td class="mono">test_formula</td><td>The macro-free sheets, evaluated with an Excel formula engine, reproduce every record and parse every settlement line</td><td><span class="chip done">Pass</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <p><span class="tag">Acceptance still outstanding</span>These tests run outside Excel. The remaining acceptance step is a live run on the operator&rsquo;s own desktop: buttons respond, an import completes, and the generated file is accepted by the bank&rsquo;s upload.</p>
+  </div>
+</section>
+
+<section id="s14">
+  <h2><span class="num">14</span>Open questions</h2>
+  <div class="rule"></div>
+  <div class="reqs">
+    <div class="req"><div class="rid">Q1</div><div>
+      <h4>Which account carries the net settlement line? <span class="chip open">Open</span></h4>
+      <p>The settlement file books it to the nodal account <code>00993564610251</code>; the bank&rsquo;s accepted TTUM carries <code>200999103427</code> for Prp India. The utility keeps the TTUM account and takes only the figure. Confirm this is right, or change the account on that row.</p></div></div>
+    <div class="req"><div class="rid">Q2</div><div>
+      <h4>Is the trailing filler 70 characters or 56? <span class="chip open">Open</span></h4>
+      <p>The accepted file says 70, the written specification says 56. Built to the file; worth correcting the specification.</p></div></div>
+    <div class="req"><div class="rid">Q3</div><div>
+      <h4>Is the one-day file-name offset a rule? <span class="chip open">Open</span></h4>
+      <p>Inferred from a single example. If the offset varies &mdash; over weekends, say &mdash; the setting covers it, but the default should be confirmed.</p></div></div>
+    <div class="req"><div class="rid">Q4</div><div>
+      <h4>Do the standard narrations always fit 35 characters? <span class="chip open">Open</span></h4>
+      <p>The longest currently reaches exactly 35. Any added wording will be rejected rather than truncated, which is safe but will stop a day&rsquo;s run.</p></div></div>
+    <div class="req"><div class="rid">Q5</div><div>
+      <h4>Does the desktop policy permit macros at all? <span class="chip open">Open</span></h4>
+      <p>Determines whether the utility runs as designed or through the formula route. Unresolved on the operator&rsquo;s machine at the time of writing.</p></div></div>
+  </div>
+
+  <h3>Beyond v1</h3>
+  <ul>
+    <li>Support for further portfolios or entities using the same row-template mechanism.</li>
+    <li>Archiving each generated file alongside the settlement file that produced it.</li>
+    <li>A reconciliation view comparing what was generated against what the bank acknowledged.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Built from source in <code>ttum/</code>: macro source under <code>vba/</code>, the build script and tests under <code>tools/</code>, the shipped workbook under <code>dist/</code>. The bank&rsquo;s specification, its accepted file and a real settlement file are kept in <code>samples/</code> as the fixtures the tests run against.</p>
+</footer>
+
+</main>
+</div>
+</div>
