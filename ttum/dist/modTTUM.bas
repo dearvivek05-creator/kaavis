@@ -787,13 +787,21 @@ Public Sub TTUM_Setup()
                    "ResetDateToToday", "ClearAmounts", "BrowseOutputFolder", _
                    "OpenOutputFolder")
 
-    ' The workbook already carries its buttons, so only step in when they are
-    ' missing - after an export that dropped the drawing, or a stray delete.
+    ' The workbook already carries its buttons. When they are there, just make
+    ' sure each one still points at its macro - that is what repairs a button
+    ' that looks right but does nothing. Only build new ones if they are gone.
     present = 0
     For i = 1 To ws.Shapes.count
         If Left$(ws.Shapes(i).Name, 5) = "btnTT" Then present = present + 1
     Next i
-    If present >= UBound(labels) - LBound(labels) + 1 Then Exit Sub
+    If present >= UBound(labels) - LBound(labels) + 1 Then
+        For i = LBound(labels) To UBound(labels)
+            On Error Resume Next
+            ws.Shapes("btnTT" & i).OnAction = "modTTUM." & macros(i)
+            On Error GoTo Fail
+        Next i
+        Exit Sub
+    End If
 
     For i = ws.Shapes.count To 1 Step -1
         If Left$(ws.Shapes(i).Name, 5) = "btnTT" Then ws.Shapes(i).Delete

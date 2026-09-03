@@ -91,8 +91,8 @@ def build_dashboard(ws):
         ws.column_dimensions[col].width = w
 
     ws.merge_cells("B3:H3")
-    ws["B3"] = ("If the buttons on the right do nothing, Excel is blocking macros:  "
-                "click Enable Editing, then Enable Content, at the top of the window.")
+    ws["B3"] = ("Buttons doing nothing?  Close Excel, right-click this file in File Explorer, "
+                "Properties, tick Unblock, reopen.  Full list on the Setup sheet.")
     ws["B3"].fill = PatternFill("solid", fgColor="FFF3CD")
     ws["B3"].font = Font(name="Calibri", size=10, bold=True, color="8A6100")
     ws["B3"].alignment = Alignment(vertical="center", indent=1)
@@ -163,8 +163,8 @@ def build_dashboard(ws):
     ws["B22"].alignment = Alignment(vertical="center")
     ws.row_dimensions[22].height = 22
 
-    ws["B24"] = ("Every button is also on the Alt+F8 macro list. If the buttons are missing "
-                 "altogether, run TTUM_Setup from there.")
+    ws["B24"] = ("Every button is also on the Alt+F8 macro list, and the Text Output sheet "
+                 "builds the same file with no macros at all.")
     ws["B24"].font = NOTE
     ws.merge_cells("B24:H24")
 
@@ -175,7 +175,7 @@ def build_entries(ws):
     banner(ws, "DAILY TTUM ENTRIES",
            "Type today's amount and Dr/Cr against each line. Blank rows are ignored.", 7)
     for col, w in {"A": 10, "B": 28, "C": 18, "D": 8, "E": 20, "F": 42,
-                   "G": 16, "H": 2.5, "I": 14, "J": 14}.items():
+                   "G": 16, "H": 6, "I": 14, "J": 14}.items():
         ws.column_dimensions[col].width = w
 
     ws.merge_cells("A3:G3")
@@ -207,7 +207,7 @@ def build_entries(ws):
         ws.cell(row=row, column=10).font = Font(size=10, bold=True)
 
     headers = ["Include", "Description", "Account Number", "Dr/Cr",
-               "Amount as keyed", "Narration template", "Reads as (INR)"]
+               "Amount as keyed", "Narration template", "Reads as (INR)", "Seq"]
     for i, text in enumerate(headers, start=1):
         c = ws.cell(row=FIRST_ROW - 1, column=i, value=text)
         c.font = HEADER
@@ -241,6 +241,14 @@ def build_entries(ws):
                 value='=IF($E%d="","",$E%d/%s)' % (r, r, divisor))
         ws.cell(row=r, column=7).number_format = "#,##0.00"
         ws.cell(row=r, column=7).font = Font(name="Calibri", size=10, bold=True, color="1F3355")
+        # Position of this row among the included ones, so the Text Output sheet
+        # can list the records with no gaps and without any macro.
+        ws.cell(row=r, column=8,
+                value='=IF(AND($A%d="Yes",$E%d<>""),'
+                      'SUMPRODUCT(($A$%d:$A%d="Yes")*($E$%d:$E%d<>"")),"")'
+                      % (r, r, FIRST_ROW, r, FIRST_ROW, r))
+        ws.cell(row=r, column=8).font = Font(name="Calibri", size=9, color="9AA5B1")
+        ws.cell(row=r, column=8).alignment = Alignment(horizontal="center")
 
     inc = DataValidation(type="list", formula1='"Yes,No"', allow_blank=True,
                          showErrorMessage=True, errorTitle="Include?",
@@ -386,6 +394,139 @@ def build_layout(ws):
     ws.sheet_view.showGridLines = False
 
 
+RECORD_FORMULA = (
+    '=IF($C{r}="","",'
+    'LEFT(INDEX(Entries!$C${f}:$C${l},$C{r})&REPT(" ",14),14)'
+    '&TEXT(ttValueDate,"ddmmyyyy")'
+    '&TEXT(INDEX(Entries!$E${f}:$E${l},$C{r})*IF(ttAmountUnit="Paise",1,100),REPT("0",23))'
+    '&INDEX(Entries!$D${f}:$D${l},$C{r})'
+    '&"0"&TEXT(ttValueDate,"ddmmyyyy")'
+    '&REPT(" ",26)'
+    '&LEFT(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE('
+    'INDEX(Entries!$F${f}:$F${l},$C{r}),'
+    '"{{DDMMYYYY}}",TEXT(ttValueDate,"ddmmyyyy")),'
+    '"{{DDMMYY}}",TEXT(ttValueDate,"ddmmyy")),'
+    '"{{YYYY}}",TEXT(ttValueDate,"yyyy")),'
+    '"{{DD}}",TEXT(ttValueDate,"dd")),'
+    '"{{MM}}",TEXT(ttValueDate,"mm")),'
+    '"{{YY}}",TEXT(ttValueDate,"yy"))&REPT(" ",35),35)'
+    '&REPT(" ",70))'
+)
+
+
+def build_textoutput(ws):
+    """A macro-free route to the same file: the records, built by formula.
+
+    Everything the macro does to lay a record out is done here in worksheet
+    functions, so the day's file can still be produced when macros are blocked.
+    """
+    banner(ws, "TEXT OUTPUT  (works without macros)",
+           "The same records, built by formula. Copy them into Notepad and save.", 3)
+    for col, w in {"A": 118, "B": 9, "C": 7}.items():
+        ws.column_dimensions[col].width = w
+
+    steps = [
+        "1.  Set the value date and the amounts as usual, on the Dashboard and Entries sheets.",
+        "2.  Select the filled cells in column A below, from A6 down to the last one with text.",
+        "3.  Copy, then paste into Notepad.",
+        "4.  Save from Notepad as the file name shown on the Dashboard, with Encoding set to ANSI.",
+    ]
+    for i, text in enumerate(steps):
+        c = ws.cell(row=3 + i, column=1, value=text)
+        c.font = Font(name="Calibri", size=10, color="1F2937")
+    ws.cell(row=3, column=1).font = Font(name="Calibri", size=10, bold=True, color="1F2937")
+
+    ws.cell(row=8, column=1, value="Record  (each line is exactly 186 characters)").font = HEADER
+    ws.cell(row=8, column=2, value="Length").font = HEADER
+    ws.cell(row=8, column=3, value="Row").font = HEADER
+    for col in (1, 2, 3):
+        ws.cell(row=8, column=col).fill = HEAD_FILL
+        ws.cell(row=8, column=col).border = BOX
+
+    first = 9
+    for i in range(LAST_ROW - FIRST_ROW + 1):
+        r = first + i
+        ws.cell(row=r, column=3,
+                value='=IFERROR(MATCH(%d,Entries!$H$%d:$H$%d,0),"")'
+                      % (i + 1, FIRST_ROW, LAST_ROW))
+        ws.cell(row=r, column=3).font = Font(name="Calibri", size=9, color="9AA5B1")
+        ws.cell(row=r, column=1,
+                value=RECORD_FORMULA.format(r=r, f=FIRST_ROW, l=LAST_ROW))
+        ws.cell(row=r, column=1).font = MONO
+        ws.cell(row=r, column=2, value='=IF($A%d="","",LEN($A%d))' % (r, r))
+        ws.cell(row=r, column=2).font = Font(name="Calibri", size=9, color="6B7280")
+        ws.cell(row=r, column=2).alignment = Alignment(horizontal="center")
+
+    ws.freeze_panes = "A%d" % first
+    ws.sheet_view.showGridLines = False
+
+
+def build_setup(ws):
+    """What to try when the buttons do not respond."""
+    banner(ws, "SETUP AND TROUBLESHOOTING",
+           "Read this if clicking a button on the Dashboard does nothing.", 3)
+    ws.column_dimensions["A"].width = 4
+    ws.column_dimensions["B"].width = 104
+
+    blocks = [
+        ("Why a button can do nothing", None),
+        ("The buttons are drawings stored in the file, so they are always visible. What they "
+         "run is a macro, and Excel will refuse to run macros in a file it does not trust. "
+         "Work down this list - the first step fixes it most of the time.", "note"),
+
+        ("1.  Unblock the file  (do this one first)", "head"),
+        ("Close the workbook. Find it in File Explorer, right-click it, choose Properties, tick "
+         "Unblock at the bottom of the General tab, click OK, then open it again.", None),
+        ("Files that arrive by email or download carry a mark that makes Excel block their "
+         "macros outright. Newer Excel shows a red bar for this - Enable Content will not appear, "
+         "and clicking anything else will not help. Unblocking is the only fix.", "note"),
+
+        ("2.  Put the workbook in a trusted folder", "head"),
+        ("File > Options > Trust Center > Trust Center Settings > Trusted Locations > "
+         "Add new location. Add the folder you keep this workbook in, then reopen it.", None),
+
+        ("3.  Check the macro setting itself", "head"),
+        ("File > Options > Trust Center > Trust Center Settings > Macro Settings. It should be "
+         "Disable all macros with notification. If it is Disable all macros without "
+         "notification, no prompt ever appears and nothing will run.", None),
+
+        ("4.  Check whether the macros arrived at all", "head"),
+        ("Press Alt+F8. If GenerateTTUM is in the list, the macros are present - run it straight "
+         "from there, and the buttons will work once trust is sorted out. If the list is empty, "
+         "the macros did not load, so do step 5.", None),
+
+        ("5.  Load the macros by hand  (about a minute, needed only once)", "head"),
+        ("Press Alt+F11 to open the Visual Basic editor. Choose File > Import File, pick "
+         "modTTUM.bas from the folder this workbook came in, then press Alt+Q to close the "
+         "editor. Save the workbook. The buttons are already wired to it and will now work.", None),
+
+        ("If macros are blocked and cannot be unblocked", "head"),
+        ("Use the Text Output sheet. It builds the same records with worksheet formulas and no "
+         "macro at all - copy them into Notepad and save. Nothing else about the workbook "
+         "changes: the dates, amounts and checks all work as normal.", None),
+    ]
+
+    row = 4
+    for text, kind in blocks:
+        c = ws.cell(row=row, column=2, value=text)
+        if kind == "head":
+            c.font = SECTION
+            c.fill = BAND
+            row += 1
+        elif kind == "note":
+            c.font = NOTE
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            ws.row_dimensions[row].height = 42
+            row += 2
+        else:
+            c.font = Font(name="Calibri", size=11, color="1F2937") if text.startswith("Why") \
+                else LABEL
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            ws.row_dimensions[row].height = 44
+            row += 2
+    ws.sheet_view.showGridLines = False
+
+
 # --------------------------------------------------------------- buttons
 
 EMU_PER_POINT = 12700
@@ -417,7 +558,7 @@ def _button_shape(index, label, macro, primary):
         '<xdr:from><xdr:col>%d</xdr:col><xdr:colOff>0</xdr:colOff>'
         '<xdr:row>%d</xdr:row><xdr:rowOff>%d</xdr:rowOff></xdr:from>'
         '<xdr:ext cx="%d" cy="%d"/>'
-        '<xdr:sp macro="modTTUM.%s" textlink="">'
+        '<xdr:sp macro="[0]!%s" textlink="">'
         '<xdr:nvSpPr><xdr:cNvPr id="%d" name="btnTT%d"/><xdr:cNvSpPr/></xdr:nvSpPr>'
         '<xdr:spPr>'
         '<a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>'
@@ -474,9 +615,11 @@ def attach_drawing(name, data, dashboard_part):
 SHEETS = [
     ("Dashboard", "shDashboard", build_dashboard),
     ("Entries", "shEntries", build_entries),
+    ("Text Output", "shTextOutput", build_textoutput),
     ("Config", "shConfig", build_config),
     ("Log", "shLog", build_log),
     ("Layout", "shLayout", build_layout),
+    ("Setup", "shSetup", build_setup),
 ]
 
 NAMES = {
