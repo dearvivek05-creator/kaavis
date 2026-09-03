@@ -17,6 +17,8 @@ Attribute VB_Name = "modTTUM"
 '
 ' Entry points (Alt+F8, or the buttons on the Dashboard):
 '   GenerateTTUM        write the file for the date on the Dashboard
+'   ImportLatestFile    read the newest settlement file from the input folder
+'   ChooseInputFile     read a settlement file you pick
 '   PreviewTTUM         show the exact records without writing a file
 '   ValidateEntries     check the entries and report problems
 '   ResetDateToToday    put today's date back into the value date cell
@@ -48,6 +50,7 @@ Private Const SH_ENTRIES       As String = "Entries"
 Private Const SH_CONFIG        As String = "Config"
 Private Const SH_LOG           As String = "Log"
 Private Const SH_PREVIEW       As String = "Preview"
+Private Const SH_IMPORT        As String = "Import"
 
 Private Const ENTRY_FIRST_ROW  As Long = 5
 Private Const ENTRY_LAST_ROW   As Long = 104
@@ -57,10 +60,27 @@ Private Const COL_ACCOUNT      As Long = 3     ' C
 Private Const COL_DRCR         As Long = 4     ' D
 Private Const COL_AMOUNT       As Long = 5     ' E
 Private Const COL_NARRATION    As Long = 6     ' F
+Private Const COL_IMPORTKEY    As Long = 8     ' H
+
+Private Const IMPORT_FIRST_ROW As Long = 10
+Private Const IMPORT_LAST_ROW  As Long = 109
+Private Const IMPORT_COL_LINE  As Long = 2     ' B
 
 Private Const CLR_ERROR        As Long = 13551615   ' light red
 Private Const CLR_NORMAL       As Long = 16777215   ' white
 Private Const CLR_INPUT        As Long = 14415871   ' pale yellow, the amount column
+
+' One line read out of an incoming settlement file.
+Private Type InputLine
+    Raw       As String
+    Account   As String
+    ValueDate As Date
+    Paise     As Currency
+    DrCr      As String
+    Narration As String
+    TargetRow As Long          ' the Entries row that claimed it, 0 if none
+End Type
+
 
 ' A single validated transaction line, ready to be formatted.
 Private Type TTUMEntry
@@ -81,7 +101,7 @@ Public Sub GenerateTTUM()
     Dim problems As Collection
     Dim valueDate As Date, fileDate As Date
     Dim folder As String, fileName As String, fullPath As String
-    Dim content As String, i As Long
+    Dim content As String
     Dim totalDr As Currency, totalCr As Currency
 
     On Error GoTo Fail
@@ -177,6 +197,376 @@ Fail:
     SetStatus "Failed - " & Err.Description, True
     MsgBox "The TTUM file could not be generated." & vbCrLf & vbCrLf & _
            "Error " & Err.Number & ": " & Err.Description, vbCritical, "TTUM - error"
+End Sub
+
+
+' Reads the newest settlement file sitting in the input folder.
+Public Sub ImportLatestFile()
+    Dim folder As String, pattern As String, path As String
+
+    folder = GetConfigText("ttInputFolder", "")
+    If Len(folder) = 0 Then
+        MsgBox "No input folder is set." & vbCrLf & vbCrLf & _
+               "Put the folder the settlement file arrives in on the Config sheet, " & _
+               "or use Choose Input File to pick one file this time.", _
+               vbInformation, "TTUM - import"
+        ChooseInputFile
+        Exit Sub
+    End If
+
+    If Right$(folder, 1) = "\" Then folder = Left$(folder, Len(folder) - 1)
+    If Len(Dir$(folder, vbDirectory)) = 0 Then
+        MsgBox "The input folder on the Config sheet does not exist:" & vbCrLf & vbCrLf & folder, _
+               vbExclamation, "TTUM - import"
+        Exit Sub
+    End If
+
+    pattern = GetConfigText("ttInputPattern", "*.txt")
+    path = FindLatestFile(folder, pattern)
+    If Len(path) = 0 Then
+        MsgBox "No file matching  " & pattern & vbCrLf & "was found in:" & vbCrLf & vbCrLf & _
+               folder, vbExclamation, "TTUM - import"
+        Exit Sub
+    End If
+
+    DoImport path
+End Sub
+
+
+' Reads a settlement file the user picks.
+Public Sub ChooseInputFile()
+    Dim fd As Object, folder As String
+
+    On Error Resume Next
+    Set fd = Application.FileDialog(3)          ' msoFileDialogFilePicker
+    On Error GoTo 0
+    If fd Is Nothing Then
+        MsgBox "Set the input folder on the Config sheet and use Import Latest Input File.", _
+               vbInformation, "TTUM - import"
+        Exit Sub
+    End If
+
+    folder = GetConfigText("ttInputFolder", "")
+    fd.Title = "Choose the settlement file to read"
+    fd.AllowMultiSelect = False
+    fd.Filters.Clear
+    fd.Filters.Add "Settlement files", "*.txt"
+    fd.Filters.Add "All files", "*.*"
+    If Len(folder) > 0 Then fd.InitialFileName = folder & "\"
+    If fd.Show = -1 Then DoImport fd.SelectedItems(1)
+End Sub
+
+
+' The newest file in `folder` whose name matches `pattern`.
+Private Function FindLatestFile(ByVal folder As String, ByVal pattern As String) As String
+    Dim name As String, best As String, bestTime As Date, stamp As Date
+
+    name = Dir$(JoinPath(folder, pattern))
+    Do While Len(name) > 0
+        stamp = FileDateTime(JoinPath(folder, name))
+        If Len(best) = 0 Or stamp > bestTime Then
+            best = name
+            bestTime = stamp
+        End If
+        name = Dir$
+    Loop
+
+    If Len(best) > 0 Then FindLatestFile = JoinPath(folder, best)
+End Function
+
+
+' Reads the file, matches its lines to the Entries sheet, shows what it found,
+' and - if the user agrees - puts the amounts onto Entries.
+Private Sub DoImport(ByVal path As String)
+    Dim lines() As InputLine, count As Long
+    Dim skipped As String, warnings As String
+    Dim totalDr As Currency, totalCr As Currency
+    Dim matched As Long, i As Long
+    Dim fileDate As Date, mixedDates As Boolean
+
+    On Error GoTo Fail
+    count = ReadInputFile(path, lines, skipped)
+    If count = 0 Then
+        MsgBox "No usable records were found in:" & vbCrLf & vbCrLf & path & _
+               IIf(Len(skipped) = 0, "", vbCrLf & vbCrLf & skipped), _
+               vbExclamation, "TTUM - import"
+        Exit Sub
+    End If
+
+    matched = MatchInputLines(lines, count, warnings)
+
+    fileDate = lines(1).ValueDate
+    For i = 1 To count
+        If lines(i).ValueDate <> fileDate Then mixedDates = True
+        If lines(i).DrCr = "D" Then
+            totalDr = totalDr + lines(i).Paise / 100
+        Else
+            totalCr = totalCr + lines(i).Paise / 100
+        End If
+    Next i
+    If mixedDates Then
+        warnings = warnings & "- the file's records do not all carry the same date; " & _
+                   Format$(fileDate, "dd-mmm-yyyy") & " was taken from the first one" & vbCrLf
+    End If
+    If Len(skipped) > 0 Then warnings = warnings & skipped
+
+    If MsgBox(ImportSummary(path, lines, count, matched, totalDr, totalCr, fileDate, warnings), _
+              vbQuestion + vbYesNo + IIf(Len(warnings) > 0, vbDefaultButton2, vbDefaultButton1), _
+              "TTUM - import summary") <> vbYes Then
+        SetStatus "Import cancelled - nothing on the Entries sheet was changed.", True
+        Exit Sub
+    End If
+
+    ApplyImport lines, count, path, fileDate
+    Exit Sub
+
+Fail:
+    MsgBox "The settlement file could not be read." & vbCrLf & vbCrLf & path & vbCrLf & vbCrLf & _
+           "Error " & Err.Number & ": " & Err.Description, vbCritical, "TTUM - import"
+End Sub
+
+
+' Reads every record out of the file. Anything that is not a usable record is
+' counted in `skipped` rather than silently dropped.
+Private Function ReadInputFile(ByVal path As String, ByRef lines() As InputLine, _
+                               ByRef skipped As String) As Long
+    Dim f As Integer, raw As String, n As Long, bad As Long, blank As Long
+    Dim why As String, firstBad As String
+
+    ReDim lines(1 To IMPORT_LAST_ROW - IMPORT_FIRST_ROW + 1)
+    n = 0
+
+    f = FreeFile
+    Open path For Input As #f
+    Do While Not EOF(f)
+        Line Input #f, raw
+        If Len(Trim$(raw)) = 0 Then
+            blank = blank + 1
+        ElseIf n >= UBound(lines) Then
+            bad = bad + 1
+            If Len(firstBad) = 0 Then firstBad = "more than " & UBound(lines) & " records"
+        Else
+            n = n + 1
+            If Not ParseInputLine(raw, lines(n), why) Then
+                n = n - 1
+                bad = bad + 1
+                If Len(firstBad) = 0 Then firstBad = why
+            End If
+        End If
+    Loop
+    Close #f
+
+    If bad > 0 Then
+        skipped = "- " & bad & " line(s) in the file could not be read (" & firstBad & ")" & vbCrLf
+    End If
+    ReadInputFile = n
+End Function
+
+
+' Pulls the fields out of one 186 character record.
+Private Function ParseInputLine(ByVal raw As String, ByRef li As InputLine, _
+                                ByRef why As String) As Boolean
+    Dim d As String, amt As String
+
+    If Len(raw) < 116 Then
+        why = "only " & Len(raw) & " characters long"
+        Exit Function
+    End If
+
+    d = Mid$(raw, LEN_ACCOUNT + 1, LEN_DATE1)
+    amt = Trim$(Mid$(raw, LEN_ACCOUNT + LEN_DATE1 + 1, LEN_AMOUNT))
+    If Not IsNumeric(d) Or Not IsNumeric(amt) Then
+        why = "the date or amount is not numeric"
+        Exit Function
+    End If
+
+    On Error GoTo Bad
+    li.Raw = raw
+    li.Account = Trim$(Mid$(raw, 1, LEN_ACCOUNT))
+    li.ValueDate = DateSerial(CInt(Mid$(d, 5, 4)), CInt(Mid$(d, 3, 2)), CInt(Mid$(d, 1, 2)))
+    li.Paise = CCur(amt)
+    li.DrCr = UCase$(Mid$(raw, LEN_ACCOUNT + LEN_DATE1 + LEN_AMOUNT + 1, 1))
+    li.Narration = Trim$(Mid$(raw, 82, LEN_NARRATION))
+    If li.DrCr <> "D" And li.DrCr <> "C" Then
+        why = "the transaction type is neither D nor C"
+        Exit Function
+    End If
+
+    ParseInputLine = True
+    Exit Function
+Bad:
+    why = "the date could not be read"
+End Function
+
+
+' Decides which Entries row each line belongs to, by looking for that row's
+' import match text inside the line's narration.
+Private Function MatchInputLines(ByRef lines() As InputLine, ByVal count As Long, _
+                                 ByRef warnings As String) As Long
+    Dim ws As Worksheet, r As Long, i As Long, hits As Long
+    Dim key As String, matched As Long, claimedBy As Long
+    Dim unmatchedLines As String, unmatchedRows As String
+
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+
+    For i = 1 To count
+        hits = 0
+        For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+            key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+            If Len(key) > 0 Then
+                If InStr(1, lines(i).Narration, key, vbTextCompare) > 0 Then
+                    hits = hits + 1
+                    lines(i).TargetRow = r
+                End If
+            End If
+        Next r
+        If hits = 0 Then
+            lines(i).TargetRow = 0
+            unmatchedLines = unmatchedLines & "    " & lines(i).Narration & vbCrLf
+        ElseIf hits > 1 Then
+            lines(i).TargetRow = 0
+            warnings = warnings & "- """ & lines(i).Narration & """ matches more than one " & _
+                       "row's import match text, so it was left out" & vbCrLf
+        Else
+            matched = matched + 1
+        End If
+    Next i
+
+    ' Two lines landing on one row would silently overwrite each other.
+    For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+        key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+        If Len(key) > 0 Then
+            claimedBy = 0
+            For i = 1 To count
+                If lines(i).TargetRow = r Then claimedBy = claimedBy + 1
+            Next i
+            If claimedBy > 1 Then
+                warnings = warnings & "- " & claimedBy & " lines match """ & key & """" & vbCrLf
+            ElseIf claimedBy = 0 Then
+                unmatchedRows = unmatchedRows & "    " & _
+                                CStr(ws.Cells(r, COL_DESC).Value) & vbCrLf
+            End If
+        End If
+    Next r
+
+    If Len(unmatchedLines) > 0 Then
+        warnings = warnings & "- these lines matched no row and were left out:" & vbCrLf & _
+                   unmatchedLines
+    End If
+    If Len(unmatchedRows) > 0 Then
+        warnings = warnings & "- these rows were not in the file; they have been cleared " & _
+                   "and set to No:" & vbCrLf & unmatchedRows
+    End If
+
+    MatchInputLines = matched
+End Function
+
+
+' The message the user reads before anything is changed.
+Private Function ImportSummary(ByVal path As String, ByRef lines() As InputLine, _
+                               ByVal count As Long, ByVal matched As Long, _
+                               ByVal totalDr As Currency, ByVal totalCr As Currency, _
+                               ByVal fileDate As Date, ByVal warnings As String) As String
+    Dim s As String, i As Long, shown As Long
+    Dim ws As Worksheet
+
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+
+    s = "File        " & Mid$(path, InStrRev(path, "\") + 1) & vbCrLf & _
+        "Value date  " & Format$(fileDate, "dd-mmm-yyyy") & vbCrLf & _
+        "Records     " & count & ",  " & matched & " matched to the Entries sheet" & vbCrLf & _
+        vbCrLf & _
+        "Total debit   " & Format$(totalDr, "#,##0.00") & vbCrLf & _
+        "Total credit  " & Format$(totalCr, "#,##0.00") & vbCrLf & _
+        "Difference    " & Format$(totalDr - totalCr, "#,##0.00") & _
+        IIf(totalDr = totalCr, "   (balanced)", "   <<< NOT BALANCED") & vbCrLf & vbCrLf
+
+    For i = 1 To count
+        If lines(i).TargetRow > 0 And shown < 12 Then
+            shown = shown + 1
+            s = s & "  " & lines(i).DrCr & "  " & _
+                Right$(Space$(16) & Format$(lines(i).Paise / 100, "#,##0.00"), 16) & "   " & _
+                CStr(ws.Cells(lines(i).TargetRow, COL_DESC).Value) & vbCrLf
+        End If
+    Next i
+    If matched > shown Then s = s & "  ... and " & (matched - shown) & " more" & vbCrLf
+
+    If Len(warnings) > 0 Then
+        s = s & vbCrLf & "Please note:" & vbCrLf & warnings
+    End If
+
+    s = s & vbCrLf & "Put these amounts onto the Entries sheet?" & vbCrLf & _
+        "Nothing is written to disk - you still review the Dashboard and click " & _
+        "Generate TTUM File."
+    ImportSummary = s
+End Function
+
+
+' Writes the imported figures onto Entries and records what was read.
+Private Sub ApplyImport(ByRef lines() As InputLine, ByVal count As Long, _
+                        ByVal path As String, ByVal fileDate As Date)
+    Dim ws As Worksheet, imp As Worksheet
+    Dim r As Long, i As Long, keyedAsPaise As Boolean, applied As Long
+    Dim key As String, claimed As Boolean
+
+    Application.ScreenUpdating = False
+    keyedAsPaise = AmountKeyedAsPaise()
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    ClearRowHighlights
+
+    ' Rows the file did not mention must not keep yesterday's figure.
+    For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+        key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+        If Len(key) > 0 Then
+            claimed = False
+            For i = 1 To count
+                If lines(i).TargetRow = r Then claimed = True
+            Next i
+            If Not claimed Then
+                ws.Cells(r, COL_AMOUNT).ClearContents
+                ws.Cells(r, COL_INCLUDE).Value = "No"
+            End If
+        End If
+    Next r
+
+    For i = 1 To count
+        r = lines(i).TargetRow
+        If r > 0 Then
+            If keyedAsPaise Then
+                ws.Cells(r, COL_AMOUNT).Value = CDbl(lines(i).Paise)
+            Else
+                ws.Cells(r, COL_AMOUNT).Value = CDbl(lines(i).Paise / 100)
+            End If
+            ws.Cells(r, COL_DRCR).Value = lines(i).DrCr
+            ws.Cells(r, COL_INCLUDE).Value = "Yes"
+            applied = applied + 1
+        End If
+    Next i
+
+    On Error Resume Next
+    Set imp = ThisWorkbook.Worksheets(SH_IMPORT)
+    If Not imp Is Nothing Then
+        imp.Range(imp.Cells(IMPORT_FIRST_ROW, IMPORT_COL_LINE), _
+                  imp.Cells(IMPORT_LAST_ROW, IMPORT_COL_LINE)).ClearContents
+        For i = 1 To count
+            imp.Cells(IMPORT_FIRST_ROW + i - 1, IMPORT_COL_LINE).Value = lines(i).Raw
+        Next i
+    End If
+    ThisWorkbook.Names("ttLastImport").RefersToRange.Value = _
+        Mid$(path, InStrRev(path, "\") + 1) & "   -   " & applied & " of " & count & _
+        " records loaded on " & Format$(Now, "dd-mmm-yyyy hh:nn")
+    On Error GoTo 0
+
+    If GetConfigBool("ttImportSetsDate", True) Then
+        On Error Resume Next
+        ThisWorkbook.Names("ttValueDate").RefersToRange.Value = fileDate
+        On Error GoTo 0
+    End If
+
+    Application.ScreenUpdating = True
+    SetStatus "Imported " & applied & " amounts for " & Format$(fileDate, "dd-mmm-yyyy") & _
+              ". Check the totals, then click Generate TTUM File.", False
+    ThisWorkbook.Worksheets(SH_DASHBOARD).Activate
 End Sub
 
 
@@ -780,12 +1170,12 @@ Public Sub TTUM_Setup()
 
     FillDefaultOutputFolder
 
-    labels = Array("Generate TTUM File", "Preview Records", "Validate Entries", _
-                   "Reset Date to Today", "Clear Amounts", "Choose Output Folder", _
-                   "Open Output Folder")
-    macros = Array("GenerateTTUM", "PreviewTTUM", "ValidateEntries", _
-                   "ResetDateToToday", "ClearAmounts", "BrowseOutputFolder", _
-                   "OpenOutputFolder")
+    labels = Array("Generate TTUM File", "Import Latest Input File", "Choose Input File", _
+                   "Preview Records", "Validate Entries", "Reset Date to Today", _
+                   "Clear Amounts", "Choose Output Folder", "Open Output Folder")
+    macros = Array("GenerateTTUM", "ImportLatestFile", "ChooseInputFile", _
+                   "PreviewTTUM", "ValidateEntries", "ResetDateToToday", _
+                   "ClearAmounts", "BrowseOutputFolder", "OpenOutputFolder")
 
     ' The workbook already carries its buttons. When they are there, just make
     ' sure each one still points at its macro - that is what repairs a button
@@ -815,7 +1205,7 @@ Public Sub TTUM_Setup()
         shp.OnAction = "modTTUM." & macros(i)
         shp.TextFrame.Characters.Text = labels(i)
         shp.TextFrame.Characters.Font.Size = 10
-        If i = 0 Then shp.TextFrame.Characters.Font.Bold = True
+        If i <= 1 Then shp.TextFrame.Characters.Font.Bold = True
     Next i
     Exit Sub
 Fail:

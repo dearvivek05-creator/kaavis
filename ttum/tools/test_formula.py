@@ -21,6 +21,8 @@ from test_workbook import SAMPLE_AMOUNTS_KEYED  # noqa: E402
 
 XLSX = os.path.join(HERE, "..", "dist", "TTUM_Generator_NoMacros.xlsx")
 SAMPLE = os.path.join(HERE, "..", "samples", "PROPELG_TTUM_16072026_Revised.txt")
+SETTLEMENT = os.path.join(HERE, "..", "samples", "NET_MERPAY_PROPELG__03092026032926.txt")
+IMPORT_FIRST = 10
 SCRATCH = os.path.join(HERE, "..", "dist", "_formula_check.xlsx")
 
 FIRST_ROW, LAST_ROW = 5, 104
@@ -42,6 +44,13 @@ def main():
     if filled != len(SAMPLE_AMOUNTS_KEYED):
         print("FAIL: filled %d of %d rows" % (filled, len(SAMPLE_AMOUNTS_KEYED)))
         return 1
+
+    # Paste a real settlement file into the Import sheet, the way someone would
+    # when macros are blocked, so its parsing formulas are checked too.
+    settlement = [l for l in open(SETTLEMENT, "rb").read().decode("ascii").split("\r\n")
+                  if l.strip()]
+    for i, line in enumerate(settlement):
+        wb["Import"].cell(row=IMPORT_FIRST + i, column=2).value = line
     wb.save(SCRATCH)
 
     import formulas
@@ -59,6 +68,33 @@ def main():
             return 1
         value = cell.value[0, 0]
         records.append(str(value))
+
+    # The Import sheet must read the settlement file back correctly.
+    for i, line in enumerate(settlement):
+        r = IMPORT_FIRST + i
+        got = {col: solution.get("'[%s]IMPORT'!%s%d" % (book, col, r)) for col in "CEFGI"}
+        if any(v is None for v in got.values()):
+            print("FAIL: Import row %d did not calculate" % r)
+            return 1
+        account = str(got["C"].value[0, 0])
+        paise = got["E"].value[0, 0]
+        drcr = str(got["F"].value[0, 0])
+        narration = str(got["G"].value[0, 0])
+        goes_to = str(got["I"].value[0, 0])
+        if account != line[:14].strip():
+            print("FAIL: Import row %d account %r" % (r, account))
+            return 1
+        if int(paise) != int(line[22:45]):
+            print("FAIL: Import row %d amount %r" % (r, paise))
+            return 1
+        if drcr != line[45] or narration != line[81:116].strip():
+            print("FAIL: Import row %d parsed as %r / %r" % (r, drcr, narration))
+            return 1
+        if goes_to in ("-- no match --", ""):
+            print("FAIL: Import row %d (%r) matched no Entries row" % (r, narration))
+            return 1
+    print("      Import sheet parsed all %d settlement lines and matched every one"
+          % len(settlement))
 
     expected = open(SAMPLE, "rb").read().decode("ascii").split("\r\n")
     for i, (got, want) in enumerate(zip(records, expected), 1):

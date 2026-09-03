@@ -17,13 +17,22 @@ equal credits, and writes the `.txt` file.
 2. **Dashboard - check the date.** The value date is already today's. To build a
    file for a different day, just type that date over it. The file-name date and
    the file name update themselves.
-3. **Entries - type the amounts.** The nine standard settlement lines are already
+3. **Get the day's amounts in** - either way works, and you can mix them:
+
+   * **From the settlement file:** click **Import Latest Input File**. It reads the
+     newest matching file from the input folder set on Config, shows you a summary -
+     value date, record count, every matched amount, and whether debits and credits
+     balance - and only puts the figures onto Entries once you say yes. **Choose
+     Input File** does the same for a file you pick.
+   * **By hand:** The nine standard settlement lines are already
    set up with their account numbers and narrations. Fill in the
    **Amount as keyed** column and adjust **Dr/Cr** if the day's flow differs.
-   Type the figure exactly as the settlement report shows it - **the last two
-   digits are the paise**, so `47400` is 474.00 and `20000` is 200.00. The
-   **Reads as (INR)** column next to it shows how each figure will be understood,
-   and the banner at the top turns green when debits and credits match.
+     type the figure exactly as the settlement report shows it - **the last two
+     digits are the paise**, so `47400` is 474.00 and `20000` is 200.00. The
+     **Reads as (INR)** column shows how each figure will be understood.
+
+   Either way, the banner at the top of Entries turns green when debits and
+   credits match.
 4. **Dashboard - set the output folder and click Generate TTUM File.** The
    **Output folder** box holds a full path such as `D:\TTUM\Daily`; type or paste
    one in, or click **Choose Output Folder**. It is filled in with a
@@ -74,6 +83,7 @@ tested against the bank's own file, so the output is the same either way.
 | **Entries** | The daily grid: include, description, account number, Dr/Cr, amount, narration, and a read-back of the amount in rupees. 100 rows. |
 | **Config** | Settings that rarely change: file-name pattern, date offset, balance rule. |
 | **Log** | A row for every file generated: when, by whom, how many records, the totals. |
+| **Import** | The last settlement file read, line by line, and what each line was matched to. |
 | **Text Output** | The same records built by formula - the route that works with macros blocked. |
 | **Layout** | The record specification, and the bank's own file as a worked example. |
 | **Setup** | What to try when a button does nothing. |
@@ -89,6 +99,44 @@ A narration is written as a template. These placeholders are replaced with the
 So `PROPELG VI settlement {DDMMYY}` becomes `PROPELG VI settlement 150726`.
 A narration longer than 35 characters after substitution is rejected rather than
 silently trimmed.
+
+### Importing the settlement file
+
+The settlement system's file is in the same 186-character layout as the TTUM file,
+so the importer reads it with the same field positions.
+
+**A line is matched to an Entries row by the row's Import match text**: the row
+claims a line when that text appears anywhere in the line's narration. The keys
+shipped on the sheet are the full wordings (`MC comm recd`, `MC GST comm recd`,
+`MC Non GST comm recd` and so on) precisely so that no line can be claimed by two
+rows. Change a key if the settlement system changes its wording.
+
+**Only the amount and the Dr/Cr flag are taken from the file.** The account number
+and the narration that go into the generated TTUM always come from the Entries
+sheet. That matters for the net settlement line: the settlement file books it to
+the nodal account, while the TTUM has to carry the Prp India account, and the
+importer keeps them apart.
+
+The summary appears before anything is written. If you say no, nothing on the
+Entries sheet changes. If you say yes:
+
+- matched rows get their amount and Dr/Cr, and are set to `Yes`;
+- rows with an import key that the file did not mention are **cleared and set to
+  `No`**, so a figure from a previous day can never be left behind;
+- rows with no import key are left completely alone, so anything you maintain by
+  hand survives an import;
+- the value date is taken from the file's own records, unless you turn that off
+  on Config.
+
+Lines the importer could not place are listed in the summary and shown on the
+Import sheet as `-- no match --`. They are left out, which puts the sheet out of
+balance, which in turn stops generation - so an unmatched line cannot slip
+through into a file.
+
+**With macros blocked**, the Import sheet still works: open the settlement file in
+Notepad, copy every line, and paste into cell `B10`. The columns beside it pull out
+the account, date, amount, Dr/Cr and narration, show which Entries row each line
+belongs to, and give you an **Amount to key** column to copy across.
 
 ### Amounts
 
@@ -113,6 +161,9 @@ whole number - a typed decimal is rejected rather than guessed at.
 | File-name date offset (days) | `1` | The bank's sample is named one day after the value date it carries. Set `0` to use the value date. |
 | Block generation when out of balance | `Yes` | `No` warns and lets you continue. |
 | Write a line break after the last record | `No` | `No` matches the bank's sample, which ends immediately after the last record. |
+| Input folder | *(blank)* | Where the settlement file arrives. Blank means you are asked each time. |
+| Input file name pattern | `NET_MERPAY_PROPELG*.txt` | Which files in that folder count as settlement files. |
+| Imported file sets the value date | `Yes` | `No` keeps whatever date is on the Dashboard. |
 
 ---
 
@@ -178,9 +229,10 @@ ttum/
             vbaproject.py, cfb.py, msovba.py  writes the embedded VBA project
             test_reference.py               layout regression test
             test_workbook.py                end-to-end test of the built workbook
-            test_formula.py                 evaluates the Text Output sheet with a
-                                            real formula engine and diffs the result
-  samples/  the bank's file and specification
+            test_import.py                  end-to-end test of the import route
+            test_formula.py                 evaluates the Text Output and Import
+                                            sheets with a real formula engine
+  samples/  the bank's file, a settlement input file, and the specification
 ```
 
 ### Rebuilding
@@ -191,7 +243,8 @@ cd ttum/tools
 python3 build_workbook.py
 python3 test_reference.py     # layout reproduces the bank's file byte for byte
 python3 test_workbook.py      # the built workbook's own rows do too
-python3 test_formula.py       # so does the macro-free Text Output sheet
+python3 test_import.py        # the settlement file imports and generates cleanly
+python3 test_formula.py       # so do the macro-free Text Output and Import sheets
 ```
 
 `test_formula.py` needs `pip install formulas`.

@@ -118,15 +118,15 @@ def build_dashboard(ws):
     input_cell(ws, "C7", "=ttValueDate+ttFileDateOffset", "dd-mmm-yyyy")
     note(8, "Today's date is filled in automatically. Type over it to build the file for another day.")
 
-    section(10, "STEP 2   Enter the amounts on the Entries sheet")
+    section(10, "STEP 2   Enter the amounts, or import them")
     label(11, "Rows included")
     ws["C11"] = '=COUNTIF(Entries!$A$%d:$A$%d,"Yes")' % (FIRST_ROW, LAST_ROW)
     label(12, "Total debit")
-    ws["C12"] = "=Entries!$J$1"
+    ws["C12"] = "=Entries!$L$1"
     label(13, "Total credit")
-    ws["C13"] = "=Entries!$J$2"
+    ws["C13"] = "=Entries!$L$2"
     label(14, "Difference  (must be 0.00)")
-    ws["C14"] = "=Entries!$J$3"
+    ws["C14"] = "=Entries!$L$3"
     for addr in ("C12", "C13", "C14"):
         ws[addr].number_format = "#,##0.00"
     for addr in ("C11", "C12", "C13", "C14"):
@@ -156,6 +156,11 @@ def build_dashboard(ws):
     ws["C19"].font = VALUE
     ws["C19"].border = BOX
 
+    note(20, "Type the amounts on the Entries sheet, or click Import Latest Input File to read "
+             "them out of the settlement file. The input folder is set on the Config sheet.")
+    ws.row_dimensions[20].height = 26
+    ws["B20"].alignment = Alignment(wrap_text=True, vertical="top")
+
     ws.cell(row=21, column=2, value="Status").font = SECTION
     ws.merge_cells("B22:H22")
     ws["B22"] = "Ready."
@@ -175,39 +180,40 @@ def build_entries(ws):
     banner(ws, "DAILY TTUM ENTRIES",
            "Type today's amount and Dr/Cr against each line. Blank rows are ignored.", 7)
     for col, w in {"A": 10, "B": 28, "C": 18, "D": 8, "E": 20, "F": 42,
-                   "G": 16, "H": 6, "I": 14, "J": 14}.items():
+                   "G": 16, "H": 26, "I": 6, "J": 2.5, "K": 14, "L": 14}.items():
         ws.column_dimensions[col].width = w
 
-    ws.merge_cells("A3:G3")
-    ws["A3"] = ('="Total debit  "&TEXT($J$1,"#,##0.00")&"      Total credit  "'
-                '&TEXT($J$2,"#,##0.00")&"      Difference  "&TEXT($J$3,"#,##0.00")'
-                '&IF($J$3=0,"    (balanced)","    <<< THESE MUST MATCH")')
+    ws.merge_cells("A3:H3")
+    ws["A3"] = ('="Total debit  "&TEXT($L$1,"#,##0.00")&"      Total credit  "'
+                '&TEXT($L$2,"#,##0.00")&"      Difference  "&TEXT($L$3,"#,##0.00")'
+                '&IF($L$3=0,"    (balanced)","    <<< THESE MUST MATCH")')
     ws["A3"].font = Font(name="Calibri", size=11, bold=True)
     ws["A3"].alignment = Alignment(vertical="center")
     ws.row_dimensions[3].height = 20
-    ws.conditional_formatting.add("A3:G3", FormulaRule(
-        formula=["$J$3<>0"], fill=PatternFill("solid", fgColor="FFC7CE"),
+    ws.conditional_formatting.add("A3:H3", FormulaRule(
+        formula=["$L$3<>0"], fill=PatternFill("solid", fgColor="FFC7CE"),
         font=Font(color="9C0006", bold=True)))
-    ws.conditional_formatting.add("A3:G3", FormulaRule(
-        formula=["$J$3=0"], fill=PatternFill("solid", fgColor="C6EFCE"),
+    ws.conditional_formatting.add("A3:H3", FormulaRule(
+        formula=["$L$3=0"], fill=PatternFill("solid", fgColor="C6EFCE"),
         font=Font(color="006100", bold=True)))
 
     divisor = 'IF(ttAmountUnit="Paise",100,1)'
-    ws["I1"] = "Total debit"
-    ws["J1"] = '=SUMIFS($E$%d:$E$%d,$D$%d:$D$%d,"D",$A$%d:$A$%d,"Yes")/%s' % (
+    ws["K1"] = "Total debit"
+    ws["L1"] = '=SUMIFS($E$%d:$E$%d,$D$%d:$D$%d,"D",$A$%d:$A$%d,"Yes")/%s' % (
         FIRST_ROW, LAST_ROW, FIRST_ROW, LAST_ROW, FIRST_ROW, LAST_ROW, divisor)
-    ws["I2"] = "Total credit"
-    ws["J2"] = '=SUMIFS($E$%d:$E$%d,$D$%d:$D$%d,"C",$A$%d:$A$%d,"Yes")/%s' % (
+    ws["K2"] = "Total credit"
+    ws["L2"] = '=SUMIFS($E$%d:$E$%d,$D$%d:$D$%d,"C",$A$%d:$A$%d,"Yes")/%s' % (
         FIRST_ROW, LAST_ROW, FIRST_ROW, LAST_ROW, FIRST_ROW, LAST_ROW, divisor)
-    ws["I3"] = "Difference"
-    ws["J3"] = "=$J$1-$J$2"
+    ws["K3"] = "Difference"
+    ws["L3"] = "=$L$1-$L$2"
     for row in (1, 2, 3):
-        ws.cell(row=row, column=9).font = NOTE
-        ws.cell(row=row, column=10).number_format = "#,##0.00"
-        ws.cell(row=row, column=10).font = Font(size=10, bold=True)
+        ws.cell(row=row, column=11).font = NOTE
+        ws.cell(row=row, column=12).number_format = "#,##0.00"
+        ws.cell(row=row, column=12).font = Font(size=10, bold=True)
 
     headers = ["Include", "Description", "Account Number", "Dr/Cr",
-               "Amount as keyed", "Narration template", "Reads as (INR)", "Seq"]
+               "Amount as keyed", "Narration template", "Reads as (INR)",
+               "Import match text", "Seq"]
     for i, text in enumerate(headers, start=1):
         c = ws.cell(row=FIRST_ROW - 1, column=i, value=text)
         c.font = HEADER
@@ -223,9 +229,10 @@ def build_entries(ws):
         ws.cell(row=r, column=3, value=row["account"])
         ws.cell(row=r, column=4, value=row["type"])
         ws.cell(row=r, column=6, value=row["narration"])
+        ws.cell(row=r, column=8, value=row["key"])
 
     for r in range(FIRST_ROW, LAST_ROW + 1):
-        for col in range(1, 8):
+        for col in range(1, 9):
             c = ws.cell(row=r, column=col)
             c.border = BOX
             c.fill = WHITE
@@ -241,14 +248,15 @@ def build_entries(ws):
                 value='=IF($E%d="","",$E%d/%s)' % (r, r, divisor))
         ws.cell(row=r, column=7).number_format = "#,##0.00"
         ws.cell(row=r, column=7).font = Font(name="Calibri", size=10, bold=True, color="1F3355")
+        ws.cell(row=r, column=8).alignment = Alignment(vertical="center")
         # Position of this row among the included ones, so the Text Output sheet
         # can list the records with no gaps and without any macro.
-        ws.cell(row=r, column=8,
+        ws.cell(row=r, column=9,
                 value='=IF(AND($A%d="Yes",$E%d<>""),'
                       'SUMPRODUCT(($A$%d:$A%d="Yes")*($E$%d:$E%d<>"")),"")'
                       % (r, r, FIRST_ROW, r, FIRST_ROW, r))
-        ws.cell(row=r, column=8).font = Font(name="Calibri", size=9, color="9AA5B1")
-        ws.cell(row=r, column=8).alignment = Alignment(horizontal="center")
+        ws.cell(row=r, column=9).font = Font(name="Calibri", size=9, color="9AA5B1")
+        ws.cell(row=r, column=9).alignment = Alignment(horizontal="center")
 
     inc = DataValidation(type="list", formula1='"Yes,No"', allow_blank=True,
                          showErrorMessage=True, errorTitle="Include?",
@@ -272,8 +280,11 @@ def build_entries(ws):
                   "the settlement report shows it - the last two digits are the paise, so 47400 is "
                   "474.00. The Reads as (INR) column shows how each figure will be understood. "
                   "Narration tokens {DDMMYY} {DDMMYYYY} {DD} {MM} {YY} {YYYY} are replaced with the "
-                  "value date; the narration must fit 35 characters after substitution.").font = NOTE
-    ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row + 1, end_column=7)
+                  "value date; the narration must fit 35 characters after substitution. "
+                  "Import match text is what an incoming settlement line's narration must contain "
+                  "for its amount to land on this row - only the amount and Dr/Cr are imported, "
+                  "never the account number or the narration.").font = NOTE
+    ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row + 1, end_column=8)
     ws.cell(row=note_row, column=1).alignment = Alignment(wrap_text=True, vertical="top")
 
 
@@ -297,6 +308,14 @@ def build_config(ws):
          "No asks first and lets you continue."),
         ("Write a line break after the last record", "No",
          "No matches the bank's sample file, which ends immediately after the last record."),
+        ("Input folder", "",
+         "The folder the settlement system drops its file into. Import Latest Input File "
+         "takes the newest matching file from here. Leave blank to be asked each time."),
+        ("Input file name pattern", "NET_MERPAY_PROPELG*.txt",
+         "Which files in that folder count as settlement files. * stands for anything."),
+        ("Imported file sets the value date", "Yes",
+         "Yes takes the value date from the file's own records. No keeps whatever is "
+         "already on the Dashboard."),
     ]
     ws.cell(row=4, column=2, value="Setting").font = HEADER
     ws.cell(row=4, column=3, value="Value").font = HEADER
@@ -324,6 +343,9 @@ def build_config(ws):
     yn = DataValidation(type="list", formula1='"Yes,No"', allow_blank=False)
     ws.add_data_validation(yn)
     yn.add("C8:C9")
+    yn2 = DataValidation(type="list", formula1='"Yes,No"', allow_blank=False)
+    ws.add_data_validation(yn2)
+    yn2.add("C12")
     ws.sheet_view.showGridLines = False
 
 
@@ -394,6 +416,105 @@ def build_layout(ws):
     ws.sheet_view.showGridLines = False
 
 
+IMPORT_FIRST, IMPORT_LAST = 10, 109
+
+
+def build_import(ws):
+    """Where an incoming settlement file lands, and what it was read as.
+
+    The macro writes the file's lines into column B; the columns beside it pull the
+    fields out by formula, so the same view works when the lines are pasted in by
+    hand because macros are blocked.
+    """
+    banner(ws, "IMPORT FROM SETTLEMENT FILE",
+           "The day's figures, read out of the file the settlement system produces.", 9)
+    for col, w in {"A": 5, "B": 62, "C": 16, "D": 13, "E": 16, "F": 7,
+                   "G": 34, "H": 16, "I": 26, "J": 5}.items():
+        ws.column_dimensions[col].width = w
+
+    lines = [
+        ("With macros working:", "click Import Latest Input File on the Dashboard. The file's "
+         "lines land here, you get a summary to check, and the amounts go onto Entries."),
+        ("With macros blocked:", "open the settlement file in Notepad, select all, copy, and "
+         "paste into cell B10 below. Then copy the Amount to key column onto the Amount "
+         "column of the Entries sheet, matching the rows named under Goes to."),
+    ]
+    for i, (head, rest) in enumerate(lines):
+        r = 3 + i
+        ws.cell(row=r, column=2, value=head).font = Font(name="Calibri", size=10, bold=True,
+                                                         color="1F3355")
+        c = ws.cell(row=r, column=3, value=rest)
+        c.font = Font(name="Calibri", size=10, color="1F2937")
+        ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=9)
+
+    ws.cell(row=6, column=2, value="Last import").font = SECTION
+    ws.merge_cells("C6:I6")
+    ws["C6"] = "Nothing imported yet."
+    ws["C6"].font = Font(name="Calibri", size=10, italic=True, color="6B7280")
+
+    ws.merge_cells("B7:I7")
+    ws["B7"] = ('="Lines below  "&COUNTIF($B$%d:$B$%d,"?*")'
+                '&"      Debit  "&TEXT(SUMIF($F$%d:$F$%d,"D",$E$%d:$E$%d)/100,"#,##0.00")'
+                '&"      Credit  "&TEXT(SUMIF($F$%d:$F$%d,"C",$E$%d:$E$%d)/100,"#,##0.00")'
+                '&"      Difference  "&TEXT((SUMIF($F$%d:$F$%d,"D",$E$%d:$E$%d)'
+                '-SUMIF($F$%d:$F$%d,"C",$E$%d:$E$%d))/100,"#,##0.00")') % ((
+                    IMPORT_FIRST, IMPORT_LAST) * 9)
+    ws["B7"].font = Font(name="Calibri", size=11, bold=True)
+    ws["B7"].alignment = Alignment(vertical="center")
+    ws.row_dimensions[7].height = 20
+
+    headers = ["#", "Line from the settlement file", "Account", "Value date",
+               "Amount (paise)", "Dr/Cr", "Narration", "Amount to key", "Goes to"]
+    for i, text in enumerate(headers, start=1):
+        c = ws.cell(row=IMPORT_FIRST - 1, column=i, value=text)
+        c.font = HEADER
+        c.fill = HEAD_FILL
+        c.border = BOX
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[IMPORT_FIRST - 1].height = 26
+
+    ef, el = FIRST_ROW, LAST_ROW
+    for r in range(IMPORT_FIRST, IMPORT_LAST + 1):
+        i = r - IMPORT_FIRST + 1
+        ws.cell(row=r, column=1, value=i).font = Font(name="Calibri", size=9, color="9AA5B1")
+        b = ws.cell(row=r, column=2)
+        b.font = MONO
+        b.fill = INPUT_FILL
+        b.number_format = "@"
+        ws.cell(row=r, column=3, value='=IF(LEN($B%d)<14,"",TRIM(MID($B%d,1,14)))' % (r, r))
+        ws.cell(row=r, column=4,
+                value='=IF(LEN($B%d)<22,"",DATE(VALUE(MID($B%d,19,4)),'
+                      'VALUE(MID($B%d,17,2)),VALUE(MID($B%d,15,2))))' % (r, r, r, r))
+        ws.cell(row=r, column=4).number_format = "dd-mmm-yyyy"
+        ws.cell(row=r, column=5, value='=IF(LEN($B%d)<45,"",VALUE(MID($B%d,23,23)))' % (r, r))
+        ws.cell(row=r, column=5).number_format = "#,##0"
+        ws.cell(row=r, column=6, value='=IF(LEN($B%d)<46,"",MID($B%d,46,1))' % (r, r))
+        ws.cell(row=r, column=6).alignment = Alignment(horizontal="center")
+        ws.cell(row=r, column=7, value='=IF(LEN($B%d)<116,"",TRIM(MID($B%d,82,35)))' % (r, r))
+        ws.cell(row=r, column=8,
+                value='=IF($E%d="","",$E%d/IF(ttAmountUnit="Paise",1,100))' % (r, r))
+        ws.cell(row=r, column=8).number_format = "#,##0.00"
+        ws.cell(row=r, column=8).font = Font(name="Calibri", size=10, bold=True, color="1F3355")
+        # Which Entries row claims this line: the one whose match text the
+        # narration contains. SUMPRODUCT keeps it a normal formula, not an array one.
+        ws.cell(row=r, column=10,
+                value='=IF($G%d="","",SUMPRODUCT(MAX((Entries!$H$%d:$H$%d<>"")'
+                      '*ISNUMBER(SEARCH(Entries!$H$%d:$H$%d,$G%d&""))'
+                      '*(ROW(Entries!$H$%d:$H$%d)-%d))))'
+                      % (r, ef, el, ef, el, r, ef, el, ef - 1))
+        ws.cell(row=r, column=10).font = Font(name="Calibri", size=8, color="C7CDD4")
+        ws.cell(row=r, column=9,
+                value='=IF($G%d="","",IF($J%d=0,"-- no match --",'
+                      'INDEX(Entries!$B$%d:$B$%d,$J%d)))' % (r, r, ef, el, r))
+        for col in range(1, 10):
+            ws.cell(row=r, column=col).border = BOX
+            if col not in (2, 8):
+                ws.cell(row=r, column=col).font = Font(name="Calibri", size=10)
+
+    ws.freeze_panes = "A%d" % IMPORT_FIRST
+    ws.sheet_view.showGridLines = False
+
+
 RECORD_FORMULA = (
     '=IF($C{r}="","",'
     'LEFT(INDEX(Entries!$C${f}:$C${l},$C{r})&REPT(" ",14),14)'
@@ -447,7 +568,7 @@ def build_textoutput(ws):
     for i in range(LAST_ROW - FIRST_ROW + 1):
         r = first + i
         ws.cell(row=r, column=3,
-                value='=IFERROR(MATCH(%d,Entries!$H$%d:$H$%d,0),"")'
+                value='=IFERROR(MATCH(%d,Entries!$I$%d:$I$%d,0),"")'
                       % (i + 1, FIRST_ROW, LAST_ROW))
         ws.cell(row=r, column=3).font = Font(name="Calibri", size=9, color="9AA5B1")
         ws.cell(row=r, column=1,
@@ -534,6 +655,8 @@ EMU_PER_POINT = 12700
 # label, macro, and whether it is the primary action
 BUTTONS = [
     ("Generate TTUM File", "GenerateTTUM", True),
+    ("Import Latest Input File", "ImportLatestFile", True),
+    ("Choose Input File...", "ChooseInputFile", False),
     ("Preview Records", "PreviewTTUM", False),
     ("Validate Entries", "ValidateEntries", False),
     ("Reset Date to Today", "ResetDateToToday", False),
@@ -615,6 +738,7 @@ def attach_drawing(name, data, dashboard_part):
 SHEETS = [
     ("Dashboard", "shDashboard", build_dashboard),
     ("Entries", "shEntries", build_entries),
+    ("Import", "shImport", build_import),
     ("Text Output", "shTextOutput", build_textoutput),
     ("Config", "shConfig", build_config),
     ("Log", "shLog", build_log),
@@ -632,6 +756,10 @@ NAMES = {
     "ttFileDateOffset": "Config!$C$7",
     "ttEnforceBalance": "Config!$C$8",
     "ttTrailingNewline": "Config!$C$9",
+    "ttInputFolder": "Config!$C$10",
+    "ttInputPattern": "Config!$C$11",
+    "ttImportSetsDate": "Config!$C$12",
+    "ttLastImport": "Import!$C$6",
 }
 
 
