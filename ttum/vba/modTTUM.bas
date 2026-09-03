@@ -23,7 +23,11 @@ Attribute VB_Name = "modTTUM"
 '   ClearAmounts        blank the amount column, ready for the next day
 '   BrowseOutputFolder  pick the output folder
 '   OpenOutputFolder    open the output folder in Explorer
-'   TTUM_Setup          (re)create the Dashboard buttons
+'   TTUM_Setup          restore the Dashboard buttons if they are ever missing
+'
+' Amounts are keyed the way the settlement report shows them: with the Config
+' setting on Paise (the default) the last two digits of the figure are the paise,
+' so 47400 means 474.00. Set it to Rupees to type 474.00 instead.
 '==============================================================================
 Option Explicit
 
@@ -374,8 +378,9 @@ Private Function CollectEntries(ByVal valueDate As Date, ByRef entries() As TTUM
     Dim ws As Worksheet, r As Long, n As Long
     Dim include As String, account As String, drcr As String, narration As String
     Dim rawAmount As Variant, paise As Currency
-    Dim isBlank As Boolean
+    Dim isBlank As Boolean, keyedAsPaise As Boolean
 
+    keyedAsPaise = AmountKeyedAsPaise()
     Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
     ReDim entries(1 To ENTRY_LAST_ROW - ENTRY_FIRST_ROW + 1)
     n = 0
@@ -415,7 +420,15 @@ Private Function CollectEntries(ByVal valueDate As Date, ByRef entries() As TTUM
             AddProblem problems, r, "amount is not a number", ws.Cells(r, COL_AMOUNT)
             GoTo NextRow
         End If
-        paise = ToPaise(rawAmount)
+        If keyedAsPaise Then
+            If CCur(rawAmount) <> Int(CCur(rawAmount)) Then
+                AddProblem problems, r, "amount must be a whole number while Config is set to " & _
+                           "Paise, because the last two digits are already the paise", _
+                           ws.Cells(r, COL_AMOUNT)
+                GoTo NextRow
+            End If
+        End If
+        paise = ToPaise(rawAmount, keyedAsPaise)
         If paise <= 0 Then
             AddProblem problems, r, "amount must be greater than zero", ws.Cells(r, COL_AMOUNT)
             GoTo NextRow
@@ -553,12 +566,28 @@ Private Function FormatRecord(ByRef e As TTUMEntry, ByVal valueDate As Date) As 
 End Function
 
 
-' Rupees -> whole paise. Currency arithmetic is exact to 4 decimals, so this
-' avoids the rounding drift a Double would introduce on large settlement values.
-Private Function ToPaise(ByVal rupees As Variant) As Currency
+' Turns what was keyed into the Amount column into whole paise.
+'
+' With the Config setting on Paise - the default - the figure is already the one
+' the settlement report shows, with the last two digits being the paise, so it is
+' used as it stands. On Rupees it is a rupee amount and gets multiplied by 100.
+'
+' Currency arithmetic is exact to four decimals, so this avoids the rounding drift
+' a Double would introduce on large settlement values.
+Private Function ToPaise(ByVal amount As Variant, ByVal keyedAsPaise As Boolean) As Currency
     Dim c As Currency
-    c = CCur(rupees) * 100
+    If keyedAsPaise Then
+        c = CCur(amount)
+    Else
+        c = CCur(amount) * 100
+    End If
     ToPaise = Int(c + CCur(0.5))
+End Function
+
+
+' True when the Amount column holds the figure exactly as the report shows it.
+Private Function AmountKeyedAsPaise() As Boolean
+    AmountKeyedAsPaise = (UCase$(GetConfigText("ttAmountUnit", "Paise")) <> "RUPEES")
 End Function
 
 
@@ -740,7 +769,7 @@ End Sub
 ' Rebuilds the Dashboard buttons. Runs on open, and can be run by hand from
 ' Alt+F8 if the buttons are ever deleted.
 Public Sub TTUM_Setup()
-    Dim ws As Worksheet, shp As Shape, i As Long
+    Dim ws As Worksheet, shp As Shape, i As Long, present As Long
     Dim labels As Variant, macros As Variant
     Dim topPos As Double
 
@@ -749,9 +778,7 @@ Public Sub TTUM_Setup()
     On Error GoTo Fail
     If ws Is Nothing Then Exit Sub
 
-    For i = ws.Shapes.count To 1 Step -1
-        If Left$(ws.Shapes(i).Name, 5) = "btnTT" Then ws.Shapes(i).Delete
-    Next i
+    FillDefaultOutputFolder
 
     labels = Array("Generate TTUM File", "Preview Records", "Validate Entries", _
                    "Reset Date to Today", "Clear Amounts", "Choose Output Folder", _
@@ -760,10 +787,22 @@ Public Sub TTUM_Setup()
                    "ResetDateToToday", "ClearAmounts", "BrowseOutputFolder", _
                    "OpenOutputFolder")
 
-    topPos = ws.Range("H4").Top
+    ' The workbook already carries its buttons, so only step in when they are
+    ' missing - after an export that dropped the drawing, or a stray delete.
+    present = 0
+    For i = 1 To ws.Shapes.count
+        If Left$(ws.Shapes(i).Name, 5) = "btnTT" Then present = present + 1
+    Next i
+    If present >= UBound(labels) - LBound(labels) + 1 Then Exit Sub
+
+    For i = ws.Shapes.count To 1 Step -1
+        If Left$(ws.Shapes(i).Name, 5) = "btnTT" Then ws.Shapes(i).Delete
+    Next i
+
+    topPos = ws.Range("H5").Top
     For i = LBound(labels) To UBound(labels)
-        Set shp = ws.Shapes.AddFormControl(0, ws.Range("H4").Left, _
-                                           topPos + i * 34, 170, 28)   ' xlButtonControl
+        Set shp = ws.Shapes.AddFormControl(0, ws.Range("H5").Left, _
+                                           topPos + i * 38, 165, 30)   ' xlButtonControl
         shp.Name = "btnTT" & i
         shp.OnAction = "modTTUM." & macros(i)
         shp.TextFrame.Characters.Text = labels(i)
@@ -775,6 +814,19 @@ Fail:
     MsgBox "The Dashboard buttons could not be created." & vbCrLf & vbCrLf & _
            "Error " & Err.Number & ": " & Err.Description & vbCrLf & vbCrLf & _
            "You can still run every command from Alt+F8.", vbExclamation, "TTUM - setup"
+End Sub
+
+
+' Puts a real, editable path in the output folder cell the first time the
+' workbook is opened, so the folder is obvious rather than an empty box.
+Private Sub FillDefaultOutputFolder()
+    Dim c As Range
+    On Error Resume Next
+    Set c = ThisWorkbook.Names("ttOutputFolder").RefersToRange
+    If c Is Nothing Then Exit Sub
+    If Len(Trim$(CStr(c.Value))) > 0 Then Exit Sub
+    If Len(ThisWorkbook.path) = 0 Then Exit Sub
+    c.Value = JoinPath(ThisWorkbook.path, "TTUM_Output")
 End Sub
 
 

@@ -18,19 +18,27 @@ equal credits, and writes the `.txt` file.
    file for a different day, just type that date over it. The file-name date and
    the file name update themselves.
 3. **Entries - type the amounts.** The nine standard settlement lines are already
-   set up with their account numbers and narrations. Fill in the **Amount (INR)**
-   column and adjust **Dr/Cr** if the day's flow differs. Amounts are in rupees,
-   so `4740.50` means four thousand seven hundred forty rupees fifty paise.
-   The banner at the top turns green when debits and credits match.
-4. **Dashboard - click Generate TTUM File.** The file is written to the output
-   folder and a row is added to the Log sheet.
+   set up with their account numbers and narrations. Fill in the
+   **Amount as keyed** column and adjust **Dr/Cr** if the day's flow differs.
+   Type the figure exactly as the settlement report shows it - **the last two
+   digits are the paise**, so `47400` is 474.00 and `20000` is 200.00. The
+   **Reads as (INR)** column next to it shows how each figure will be understood,
+   and the banner at the top turns green when debits and credits match.
+4. **Dashboard - set the output folder and click Generate TTUM File.** The
+   **Output folder** box holds a full path such as `D:\TTUM\Daily`; type or paste
+   one in, or click **Choose Output Folder**. It is filled in with a
+   `TTUM_Output` folder beside the workbook the first time you open the file.
+   The file is written there and a row is added to the Log sheet.
 
 Use **Preview Records** first if you want to see the exact 186-character lines
 without writing anything to disk. **Clear Amounts** blanks the amount column
 ready for the next day.
 
-If the buttons are ever missing, press `Alt+F8` and run `TTUM_Setup` - every
-command is also in that same `Alt+F8` list.
+The seven buttons are stored in the workbook, so they are on the Dashboard the
+moment it opens. If clicking one does nothing, Excel is still blocking macros -
+click **Enable Editing** and then **Enable Content** on the bar at the top of the
+window. Every command is also on the `Alt+F8` macro list, and `TTUM_Setup`
+rebuilds the buttons if they are ever deleted.
 
 ---
 
@@ -39,7 +47,7 @@ command is also in that same `Alt+F8` list.
 | Sheet | What it is for |
 |---|---|
 | **Dashboard** | The date, the output folder, the totals, and the buttons. |
-| **Entries** | The daily grid: include, description, account number, Dr/Cr, amount, narration. 100 rows. |
+| **Entries** | The daily grid: include, description, account number, Dr/Cr, amount, narration, and a read-back of the amount in rupees. 100 rows. |
 | **Config** | Settings that rarely change: file-name pattern, date offset, balance rule. |
 | **Log** | A row for every file generated: when, by whom, how many records, the totals. |
 | **Layout** | The record specification, and the bank's own file as a worked example. |
@@ -56,10 +64,25 @@ So `PROPELG VI settlement {DDMMYY}` becomes `PROPELG VI settlement 150726`.
 A narration longer than 35 characters after substitution is rejected rather than
 silently trimmed.
 
+### Amounts
+
+The **Amount column is entered as** setting on Config decides how the figure you
+type is read:
+
+| Setting | You type | The file carries | Reads as |
+|---|---|---|---|
+| `Paise` (default) | `47400` | `...00000047400` | 474.00 |
+| `Rupees` | `474.00` | `...00000047400` | 474.00 |
+
+`Paise` matches the settlement report, where the last two digits are already the
+paise, so nothing has to be converted by hand. In that mode the amount must be a
+whole number - a typed decimal is rejected rather than guessed at.
+
 ### Config
 
 | Setting | Default | Notes |
 |---|---|---|
+| Amount column is entered as | `Paise` | See above. |
 | File name pattern | `PROPELG_TTUM_{DDMMYYYY}.txt` | Tokens use the file-name date. |
 | File-name date offset (days) | `1` | The bank's sample is named one day after the value date it carries. Set `0` to use the value date. |
 | Block generation when out of balance | `Yes` | `No` warns and lets you continue. |
@@ -88,6 +111,7 @@ last record.
 - Generate when debits do not equal credits (unless you turn that rule off).
 - Generate a record whose account number, narration or amount will not fit its field.
 - Generate with a blank or non-numeric amount, or a Dr/Cr that is not `D` or `C`.
+- Generate from a fractional amount while the Config setting is `Paise`.
 - Overwrite an existing file without asking.
 
 Rows that fail a check are highlighted on the Entries sheet and listed in the

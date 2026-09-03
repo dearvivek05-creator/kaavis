@@ -19,17 +19,19 @@ from ttum_reference import build_file, substitute_tokens  # noqa: E402
 XLSM = os.path.join(HERE, "..", "dist", "TTUM_Generator.xlsm")
 SAMPLE = os.path.join(HERE, "..", "samples", "PROPELG_TTUM_16072026_Revised.txt")
 
-# The bank's figures for value date 15-07-2026, keyed by the row's Description.
-SAMPLE_AMOUNTS = {
-    "VI settlement": 200.00,
-    "MC settlement": 300.00,
-    "MC commission received": 10.00,
-    "VI commission received": 10.00,
-    "MC GST on commission": 2.00,
-    "VI GST on commission": 2.00,
-    "MC Non-GST commission": 1.00,
-    "VI Non-GST commission": 1.00,
-    "Net settlement to Prp India": 474.00,
+# The bank's figures for value date 15-07-2026, exactly as they would be typed
+# into the Amount column under the default Paise setting: the last two digits are
+# the paise, so 47400 is 474.00.
+SAMPLE_AMOUNTS_KEYED = {
+    "VI settlement": 20000,
+    "MC settlement": 30000,
+    "MC commission received": 1000,
+    "VI commission received": 1000,
+    "MC GST on commission": 200,
+    "VI GST on commission": 200,
+    "MC Non-GST commission": 100,
+    "VI Non-GST commission": 100,
+    "Net settlement to Prp India": 47400,
 }
 
 FIRST_ROW, LAST_ROW = 5, 104
@@ -45,7 +47,13 @@ def main():
     entries, config = wb["Entries"], wb["Config"]
 
     settings = {config.cell(row=r, column=2).value: config.cell(row=r, column=3).value
-                for r in range(5, 9)}
+                for r in range(5, 10)}
+
+    # The macro divides the keyed figure by 100 unless Config says Rupees.
+    unit = str(settings["Amount column is entered as"]).strip().lower()
+    if unit not in ("paise", "rupees"):
+        return fail("unexpected amount unit in Config: %r" % unit)
+    divisor = 100.0 if unit == "paise" else 1.0
 
     value_date = date(2026, 7, 15)
     rows, total_dr, total_cr = [], 0.0, 0.0
@@ -54,9 +62,9 @@ def main():
         label = entries.cell(row=r, column=2).value
         if not include or str(include).strip().lower() != "yes":
             continue
-        if label not in SAMPLE_AMOUNTS:
+        if label not in SAMPLE_AMOUNTS_KEYED:
             return fail("row %d is included but has no sample figure: %r" % (r, label))
-        amount = SAMPLE_AMOUNTS[label]
+        amount = SAMPLE_AMOUNTS_KEYED[label] / divisor
         drcr = entries.cell(row=r, column=4).value
         rows.append((entries.cell(row=r, column=3).value, amount, drcr,
                      entries.cell(row=r, column=6).value))
@@ -65,8 +73,9 @@ def main():
         else:
             total_cr += amount
 
-    if len(rows) != len(SAMPLE_AMOUNTS):
-        return fail("expected %d included rows, found %d" % (len(SAMPLE_AMOUNTS), len(rows)))
+    if len(rows) != len(SAMPLE_AMOUNTS_KEYED):
+        return fail("expected %d included rows, found %d"
+                    % (len(SAMPLE_AMOUNTS_KEYED), len(rows)))
     if round(total_dr - total_cr, 2) != 0:
         return fail("the shipped rows do not balance: %.2f vs %.2f" % (total_dr, total_cr))
 
@@ -91,6 +100,7 @@ def main():
     print("PASS: the workbook's own rows and settings reproduce the bank file exactly")
     print("      %d records, %d bytes, debit %.2f = credit %.2f, file name %s"
           % (len(rows), len(produced), total_dr, total_cr, file_name))
+    print("      amounts keyed as %s: 47400 read back as %.2f" % (unit, 47400 / divisor))
     return 0
 
 
