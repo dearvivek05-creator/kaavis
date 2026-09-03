@@ -219,7 +219,9 @@ click OK.
 
 ```
 ttum/
+  PRD.html  the product requirements document
   dist/     TTUM_Generator.xlsm             the utility
+            TTUM_Generator_PRD.docx         the PRD as a Word file
             TTUM_Generator_NoMacros.xlsx    same sheets, macro-free fallback
             modTTUM.bas                     the macro source, for manual import
   vba/      modTTUM.bas, ThisWorkbook.cls   VBA source of record
