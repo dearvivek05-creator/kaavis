@@ -85,7 +85,7 @@ def input_cell(ws, addr, value=None, fmt=None):
 
 def build_dashboard(ws):
     banner(ws, "TTUM GENERATOR",
-           "Enter the day's amounts on the Entries sheet, check the date, then click Generate.", 8)
+           "Choose the date, get the day's amounts in, then click Generate.", 8)
     widths = {"A": 2.5, "B": 34, "C": 46, "D": 2.5, "E": 2.5, "F": 2.5, "G": 2.5, "H": 30}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
@@ -106,72 +106,100 @@ def build_dashboard(ws):
     def label(row, text):
         ws.cell(row=row, column=2, value=text).font = LABEL
 
-    def note(row, text):
+    def note(row, text, height=None):
         c = ws.cell(row=row, column=2, value=text)
         c.font = NOTE
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=3)
+        if height:
+            ws.row_dimensions[row].height = height
+            c.alignment = Alignment(wrap_text=True, vertical="top")
 
-    section(5, "STEP 1   Set the date")
-    label(6, "Value date  (goes into every record)")
-    input_cell(ws, "C6", "=TODAY()", "dd-mmm-yyyy")
-    label(7, "File-name date  (offset is set on Config)")
-    input_cell(ws, "C7", "=ttValueDate+ttFileDateOffset", "dd-mmm-yyyy")
-    note(8, "Today's date is filled in automatically. Type over it to build the file for another day.")
+    # ---- STEP 1: which day is this file for --------------------------------
+    section(5, "STEP 1   Which day is this file for?")
+    label(6, "Use today's date?")
+    input_cell(ws, "C6", "Yes")
+    label(7, "...or generate for this date")
+    input_cell(ws, "C7", None, "dd-mmm-yyyy")
+    label(8, "Value date used in the records")
+    ws["C8"] = '=IF(ttUseToday="Yes",TODAY(),IF(ttChosenDate="","",ttChosenDate))'
+    ws["C8"].number_format = "dd-mmm-yyyy  (ddd)"
+    ws["C8"].font = Font(name="Calibri", size=12, bold=True, color="1F3355")
+    ws["C8"].border = BOX
+    ws["C8"].fill = PatternFill("solid", fgColor="EDF2FA")
+    ws.row_dimensions[8].height = 20
+    label(9, "File-name date  (offset is set on Config)")
+    ws["C9"] = "=ttValueDate+ttFileDateOffset"
+    ws["C9"].number_format = "dd-mmm-yyyy"
+    ws["C9"].font = VALUE
+    ws["C9"].border = BOX
+    note(10, "Leave the first box on Yes for today's file. For any other day set it to No and type "
+             "the date below it - or just click Generate for Another Date and type the date when "
+             "asked. Importing a settlement file also sets the date from the file itself.", 40)
 
-    section(10, "STEP 2   Enter the amounts, or import them")
-    label(11, "Rows included")
-    ws["C11"] = '=COUNTIF(Entries!$A$%d:$A$%d,"Yes")' % (FIRST_ROW, LAST_ROW)
-    label(12, "Total debit")
-    ws["C12"] = "=Entries!$L$1"
-    label(13, "Total credit")
-    ws["C13"] = "=Entries!$L$2"
-    label(14, "Difference  (must be 0.00)")
-    ws["C14"] = "=Entries!$L$3"
-    for addr in ("C12", "C13", "C14"):
+    # ---- STEP 2: the amounts ----------------------------------------------
+    section(12, "STEP 2   Enter the amounts, or import them")
+    label(13, "Rows included")
+    ws["C13"] = '=COUNTIF(Entries!$A$%d:$A$%d,"Yes")' % (FIRST_ROW, LAST_ROW)
+    label(14, "Total debit")
+    ws["C14"] = "=Entries!$L$1"
+    label(15, "Total credit")
+    ws["C15"] = "=Entries!$L$2"
+    label(16, "Difference  (must be 0.00)")
+    ws["C16"] = "=Entries!$L$3"
+    for addr in ("C14", "C15", "C16"):
         ws[addr].number_format = "#,##0.00"
-    for addr in ("C11", "C12", "C13", "C14"):
+    for addr in ("C13", "C14", "C15", "C16"):
         ws[addr].font = VALUE
         ws[addr].border = BOX
-    ws.conditional_formatting.add("C14", CellIsRule(
+    ws.conditional_formatting.add("C16", CellIsRule(
         operator="notEqual", formula=["0"],
         fill=PatternFill("solid", fgColor="FFC7CE"), font=Font(color="9C0006", bold=True)))
-    ws.conditional_formatting.add("C14", CellIsRule(
+    ws.conditional_formatting.add("C16", CellIsRule(
         operator="equal", formula=["0"],
         fill=PatternFill("solid", fgColor="C6EFCE"), font=Font(color="006100", bold=True)))
+    note(17, "Type the amounts on the Entries sheet, or click Import Latest Input File to read "
+             "them out of the settlement file. The input folder is set on the Config sheet.", 26)
 
-    section(16, "STEP 3   Choose where the file goes, then generate")
-    label(17, "Output folder")
-    input_cell(ws, "C17")
-    ws["C17"].alignment = Alignment(vertical="center", indent=1)
-    ws.row_dimensions[17].height = 20
-    note(18, "Type or paste a full folder path here, for example  D:\\TTUM\\Daily  -  or click "
-             "Choose Output Folder. Left blank, files go to a TTUM_Output folder beside this workbook.")
-    ws.row_dimensions[18].height = 26
-    ws["B18"].alignment = Alignment(wrap_text=True, vertical="top")
-    label(19, "File name")
-    ws["C19"] = ('=SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(ttFileNamePattern,'
+    # ---- STEP 3: where it goes --------------------------------------------
+    section(19, "STEP 3   Choose where the file goes, then generate")
+    label(20, "Output folder")
+    input_cell(ws, "C20")
+    ws["C20"].alignment = Alignment(vertical="center", indent=1)
+    ws.row_dimensions[20].height = 20
+    note(21, "Type or paste a full folder path here, for example  D:\\TTUM\\Daily  -  or click "
+             "Choose Output Folder. Left blank, files go to a TTUM_Output folder beside this "
+             "workbook.", 26)
+    label(22, "File name")
+    ws["C22"] = ('=SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(ttFileNamePattern,'
                  '"{DDMMYYYY}",TEXT(ttFileDate,"ddmmyyyy")),'
                  '"{DDMMYY}",TEXT(ttFileDate,"ddmmyy")),'
                  '"{YYYY}",TEXT(ttFileDate,"yyyy"))')
-    ws["C19"].font = VALUE
-    ws["C19"].border = BOX
+    ws["C22"].font = VALUE
+    ws["C22"].border = BOX
 
-    note(20, "Type the amounts on the Entries sheet, or click Import Latest Input File to read "
-             "them out of the settlement file. The input folder is set on the Config sheet.")
-    ws.row_dimensions[20].height = 26
-    ws["B20"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.cell(row=24, column=2, value="Status").font = SECTION
+    ws.merge_cells("B25:H25")
+    ws["B25"] = "Ready."
+    ws["B25"].font = Font(name="Calibri", size=11, bold=True, color="006E3C")
+    ws["B25"].alignment = Alignment(vertical="center")
+    ws.row_dimensions[25].height = 22
 
-    ws.cell(row=21, column=2, value="Status").font = SECTION
-    ws.merge_cells("B22:H22")
-    ws["B22"] = "Ready."
-    ws["B22"].font = Font(name="Calibri", size=11, bold=True, color="006E3C")
-    ws["B22"].alignment = Alignment(vertical="center")
-    ws.row_dimensions[22].height = 22
-
-    ws["B24"] = ("Every button is also on the Alt+F8 macro list, and the Text Output sheet "
+    ws["B27"] = ("Every button is also on the Alt+F8 macro list, and the Text Output sheet "
                  "builds the same file with no macros at all.")
-    ws["B24"].font = NOTE
-    ws.merge_cells("B24:H24")
+    ws["B27"].font = NOTE
+    ws.merge_cells("B27:H27")
+
+    yn = DataValidation(type="list", formula1='"Yes,No"', allow_blank=False,
+                        showErrorMessage=True, errorTitle="Use today's date?",
+                        error="Yes builds today's file. No uses the date in the box below.")
+    ws.add_data_validation(yn)
+    yn.add("C6")
+    chosen = DataValidation(type="date", operator="between",
+                            formula1="DATE(2000,1,1)", formula2="DATE(2100,12,31)",
+                            allow_blank=True, showErrorMessage=True, errorTitle="Value date",
+                            error="Enter the date the records should carry, e.g. 03-Sep-2026.")
+    ws.add_data_validation(chosen)
+    chosen.add("C7")
 
     ws.sheet_view.showGridLines = False
 
@@ -655,11 +683,12 @@ EMU_PER_POINT = 12700
 # label, macro, and whether it is the primary action
 BUTTONS = [
     ("Generate TTUM File", "GenerateTTUM", True),
+    ("Generate for Another Date...", "GenerateForAnotherDate", True),
     ("Import Latest Input File", "ImportLatestFile", True),
     ("Choose Input File...", "ChooseInputFile", False),
     ("Preview Records", "PreviewTTUM", False),
     ("Validate Entries", "ValidateEntries", False),
-    ("Reset Date to Today", "ResetDateToToday", False),
+    ("Use Today's Date", "UseTodaysDate", False),
     ("Clear Amounts", "ClearAmounts", False),
     ("Choose Output Folder...", "BrowseOutputFolder", False),
     ("Open Output Folder", "OpenOutputFolder", False),
@@ -747,10 +776,12 @@ SHEETS = [
 ]
 
 NAMES = {
-    "ttValueDate": "Dashboard!$C$6",
-    "ttFileDate": "Dashboard!$C$7",
-    "ttOutputFolder": "Dashboard!$C$17",
-    "ttStatus": "Dashboard!$B$22",
+    "ttUseToday": "Dashboard!$C$6",
+    "ttChosenDate": "Dashboard!$C$7",
+    "ttValueDate": "Dashboard!$C$8",
+    "ttFileDate": "Dashboard!$C$9",
+    "ttOutputFolder": "Dashboard!$C$20",
+    "ttStatus": "Dashboard!$B$25",
     "ttAmountUnit": "Config!$C$5",
     "ttFileNamePattern": "Config!$C$6",
     "ttFileDateOffset": "Config!$C$7",

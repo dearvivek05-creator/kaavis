@@ -337,7 +337,7 @@ footer p{max-width:68ch}
   <p>The settlement report gives figures with the paise as the last two digits and no decimal point, so that is what the operator types: <code>47400</code> means &#8377;474.00. The sheet shows a live <em>Reads as (INR)</em> column beside each entry so the decimal point is never in doubt, and a fractional entry is rejected rather than guessed at. A configuration setting switches the column to rupees for anyone who prefers <code>474.00</code>.</p>
 
   <h3>Two dates, and they differ</h3>
-  <p>The <strong>value date</strong> is carried inside every record, twice. The <strong>file-name date</strong> is what the file is called. In the bank&rsquo;s accepted example these differ by one day &mdash; records dated 15 July in a file named for 16 July &mdash; so the offset is a setting, defaulting to one day, and the resolved file name is shown on screen before generation.</p>
+  <p>A file is generated for today by default, and for any other day by switching the dashboard off today and entering a date. The <strong>value date</strong> is carried inside every record, twice. The <strong>file-name date</strong> is what the file is called. In the bank&rsquo;s accepted example these differ by one day &mdash; records dated 15 July in a file named for 16 July &mdash; so the offset is a setting, defaulting to one day, and the resolved file name is shown on screen before generation.</p>
 
   <h3>The day must balance</h3>
   <p>Total debits must equal total credits. Both sample days do so exactly, and the balancing entry is the net settlement line. This is treated as a hard rule: an unbalanced day blocks generation by default, and the running difference is displayed while amounts are entered.</p>
@@ -371,7 +371,10 @@ footer p{max-width:68ch}
   <div class="reqs">
     <div class="req"><div class="rid">FR-1</div><div>
       <h4>Date selection</h4>
-      <p>The value date defaults to the system date and accepts any date typed over it. The file-name date follows at a configurable offset and is itself editable. Both are visible before generation.</p></div></div>
+      <p>A file can be generated for today or for any other day. A switch chooses between the system date and an explicitly entered one, so choosing a date never destroys the today setting and returning to today is one click. A <em>Generate for Another Date</em> action asks for the date and generates in one step. The file-name date follows at a configurable offset. The value date is shown with its weekday before generation.</p></div></div>
+    <div class="req"><div class="rid">FR-1b</div><div>
+      <h4>Guard against a misdated file</h4>
+      <p>A value date in the future, or more than thirty days in the past, is confirmed before generation. Both are legitimate but usually a typo, and a misdated settlement file is expensive to unwind.</p></div></div>
     <div class="req"><div class="rid">FR-2</div><div>
       <h4>Manual entry</h4>
       <p>A hundred-row grid holding include flag, description, account number, Dr/Cr, amount and narration template, pre-loaded with the nine standard lines. Dropdowns constrain the include and Dr/Cr columns; account numbers are held as text so leading zeros survive.</p></div></div>
@@ -465,7 +468,7 @@ footer p{max-width:68ch}
   </div>
   <h3>Manual route</h3>
   <div class="flow">
-    <div class="step"><div class="n">1</div><div><p><b>Set the date</b> if it is not today.</p></div></div>
+    <div class="step"><div class="n">1</div><div><p><b>Set the date</b> if it is not today &mdash; the switch on the dashboard, or the <em>Generate for Another Date</em> action, which asks for the date and generates in one step.</p></div></div>
     <div class="step"><div class="n">2</div><div><p><b>Type the amounts</b> against the nine standard lines, adjusting Dr/Cr where the day&rsquo;s flow differs. The banner turns green when the day balances.</p></div></div>
     <div class="step"><div class="n">3</div><div><p><b>Generate.</b> Identical from here on.</p></div></div>
   </div>

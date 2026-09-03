@@ -33,8 +33,10 @@ def main():
     wb = openpyxl.load_workbook(XLSX)
     entries = wb["Entries"]
 
-    # Fill in the day the bank's sample covers.
-    wb["Dashboard"]["C6"] = date(2026, 7, 15)
+    # Point the workbook at the day the bank's sample covers, the way the
+    # "generate for another date" path does: today off, an explicit date on.
+    wb["Dashboard"]["C6"] = "No"
+    wb["Dashboard"]["C7"] = date(2026, 7, 15)
     filled = 0
     for r in range(FIRST_ROW, LAST_ROW + 1):
         label = entries.cell(row=r, column=2).value
@@ -103,6 +105,26 @@ def main():
             print("  got %r" % got)
             print("  exp %r" % want)
             return 1
+
+    # The other branch of the date switch: "use today" must resolve to today.
+    wb2 = openpyxl.load_workbook(XLSX)
+    wb2["Dashboard"]["C6"] = "Yes"
+    wb2["Dashboard"]["C7"] = None
+    e2 = wb2["Entries"]
+    for r in range(FIRST_ROW, LAST_ROW + 1):
+        label = e2.cell(row=r, column=2).value
+        if label in SAMPLE_AMOUNTS_KEYED:
+            e2.cell(row=r, column=5).value = SAMPLE_AMOUNTS_KEYED[label]
+    wb2.save(SCRATCH)
+    today_sol = formulas.ExcelModel().loads(SCRATCH).finish().calculate()
+    os.remove(SCRATCH)
+    first = str(today_sol.get("'[%s]TEXT OUTPUT'!A%d" % (book, OUT_FIRST)).value[0, 0])
+    stamped = first[14:22]
+    wanted = date.today().strftime("%d%m%Y")
+    if stamped != wanted:
+        print("FAIL: with today selected the record carries %r, expected %r" % (stamped, wanted))
+        return 1
+    print("      with \"use today\" selected, records carry %s" % wanted)
 
     print("PASS: the Text Output formulas reproduce all %d records of the bank file"
           % len(records))

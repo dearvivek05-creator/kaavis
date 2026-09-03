@@ -21,7 +21,8 @@ Attribute VB_Name = "modTTUM"
 '   ChooseInputFile     read a settlement file you pick
 '   PreviewTTUM         show the exact records without writing a file
 '   ValidateEntries     check the entries and report problems
-'   ResetDateToToday    put today's date back into the value date cell
+'   GenerateForAnotherDate  ask for a date, then generate that day's file
+'   UseTodaysDate       put the workbook back on today
 '   ClearAmounts        blank the amount column, ready for the next day
 '   BrowseOutputFolder  pick the output folder
 '   OpenOutputFolder    open the output folder in Explorer
@@ -109,6 +110,10 @@ Public Sub GenerateTTUM()
     ClearRowHighlights
 
     If Not ReadDates(valueDate, fileDate) Then GoTo Done
+    If Not ConfirmUnusualDate(valueDate) Then
+        SetStatus "Cancelled - the value date was not confirmed.", True
+        GoTo Done
+    End If
 
     Set problems = New Collection
     count = CollectEntries(valueDate, entries, problems)
@@ -557,11 +562,7 @@ Private Sub ApplyImport(ByRef lines() As InputLine, ByVal count As Long, _
         " records loaded on " & Format$(Now, "dd-mmm-yyyy hh:nn")
     On Error GoTo 0
 
-    If GetConfigBool("ttImportSetsDate", True) Then
-        On Error Resume Next
-        ThisWorkbook.Names("ttValueDate").RefersToRange.Value = fileDate
-        On Error GoTo 0
-    End If
+    If GetConfigBool("ttImportSetsDate", True) Then SetValueDate fileDate
 
     Application.ScreenUpdating = True
     SetStatus "Imported " & applied & " amounts for " & Format$(fileDate, "dd-mmm-yyyy") & _
@@ -581,6 +582,10 @@ Public Sub PreviewTTUM()
     ClearRowHighlights
 
     If Not ReadDates(valueDate, fileDate) Then GoTo Done
+    If Not ConfirmUnusualDate(valueDate) Then
+        SetStatus "Cancelled - the value date was not confirmed.", True
+        GoTo Done
+    End If
 
     Set problems = New Collection
     count = CollectEntries(valueDate, entries, problems)
@@ -665,10 +670,52 @@ Public Sub ValidateEntries()
 End Sub
 
 
-Public Sub ResetDateToToday()
+' Puts the workbook back on today's date.
+Public Sub UseTodaysDate()
     On Error Resume Next
-    ThisWorkbook.Names("ttValueDate").RefersToRange.Value = Date
-    SetStatus "Value date reset to " & Format$(Date, "dd-mmm-yyyy") & ".", False
+    ThisWorkbook.Names("ttUseToday").RefersToRange.Value = "Yes"
+    ThisWorkbook.Names("ttChosenDate").RefersToRange.ClearContents
+    SetStatus "Now set to today, " & Format$(Date, "dd-mmm-yyyy") & ".", False
+End Sub
+
+
+' Asks which day the file is for, sets the workbook to it, and generates.
+Public Sub GenerateForAnotherDate()
+    Dim answer As String, wanted As Date
+
+    answer = InputBox( _
+        "Which day should this TTUM file be for?" & vbCrLf & vbCrLf & _
+        "Type the date the records must carry, for example  03-Sep-2026  or  03/09/2026." & _
+        vbCrLf & vbCrLf & _
+        "The file name follows this date by the offset set on the Config sheet.", _
+        "TTUM - generate for another date", Format$(Date, "dd-mmm-yyyy"))
+
+    If Len(Trim$(answer)) = 0 Then Exit Sub          ' cancelled
+
+    If Not TryDate(answer, wanted) Then
+        MsgBox """" & answer & """ is not a date this workbook can read." & vbCrLf & vbCrLf & _
+               "Type it as dd-mmm-yyyy, for example 03-Sep-2026.", _
+               vbExclamation, "TTUM - date not understood"
+        Exit Sub
+    End If
+
+    SetValueDate wanted
+    SetStatus "Set to " & Format$(wanted, "dd-mmm-yyyy (ddd)") & ". Generating...", False
+    GenerateTTUM
+End Sub
+
+
+' Points the workbook at one specific day, whether that came from the operator
+' or from an imported settlement file.
+Private Sub SetValueDate(ByVal d As Date)
+    On Error Resume Next
+    If d = Date Then
+        ThisWorkbook.Names("ttUseToday").RefersToRange.Value = "Yes"
+        ThisWorkbook.Names("ttChosenDate").RefersToRange.ClearContents
+    Else
+        ThisWorkbook.Names("ttUseToday").RefersToRange.Value = "No"
+        ThisWorkbook.Names("ttChosenDate").RefersToRange.Value = d
+    End If
 End Sub
 
 
@@ -734,9 +781,11 @@ Private Function ReadDates(ByRef valueDate As Date, ByRef fileDate As Date) As B
     ReadDates = True
     Exit Function
 Bad:
-    SetStatus "The value date on the Dashboard is not a valid date.", True
-    MsgBox "Please enter a valid value date on the Dashboard." & vbCrLf & vbCrLf & _
-           "Leave it as today's date, or type the date you want the file to carry.", _
+    SetStatus "No value date is set on the Dashboard.", True
+    MsgBox "This file has no date yet." & vbCrLf & vbCrLf & _
+           "On the Dashboard, either set ""Use today's date?"" to Yes, or set it to No and " & _
+           "type the date you want in the box below it." & vbCrLf & vbCrLf & _
+           "Generate for Another Date does both for you.", _
            vbExclamation, "TTUM - date required"
     ReadDates = False
 End Function
@@ -758,6 +807,30 @@ Private Function TryDate(ByVal v As Variant, ByRef result As Date) As Boolean
     Exit Function
 Bad:
     TryDate = False
+End Function
+
+
+' A settlement file dated in the future, or a long way back, is usually a typo.
+' Warn once and let the operator decide; everything else passes straight through.
+Private Function ConfirmUnusualDate(ByVal valueDate As Date) As Boolean
+    Dim why As String, gap As Long
+
+    gap = DateDiff("d", Date, valueDate)
+    If gap > 0 Then
+        why = "It is " & gap & " day(s) in the future."
+    ElseIf gap < -30 Then
+        why = "It is " & Abs(gap) & " days ago."
+    End If
+
+    If Len(why) = 0 Then
+        ConfirmUnusualDate = True
+        Exit Function
+    End If
+
+    ConfirmUnusualDate = (MsgBox( _
+        "This file will be dated " & Format$(valueDate, "dd-mmm-yyyy (dddd)") & "." & vbCrLf & _
+        vbCrLf & why & vbCrLf & vbCrLf & "Generate it for that date?", _
+        vbQuestion + vbYesNo + vbDefaultButton2, "TTUM - check the date") = vbYes)
 End Function
 
 
@@ -1170,11 +1243,13 @@ Public Sub TTUM_Setup()
 
     FillDefaultOutputFolder
 
-    labels = Array("Generate TTUM File", "Import Latest Input File", "Choose Input File", _
-                   "Preview Records", "Validate Entries", "Reset Date to Today", _
+    labels = Array("Generate TTUM File", "Generate for Another Date", _
+                   "Import Latest Input File", "Choose Input File", _
+                   "Preview Records", "Validate Entries", "Use Today's Date", _
                    "Clear Amounts", "Choose Output Folder", "Open Output Folder")
-    macros = Array("GenerateTTUM", "ImportLatestFile", "ChooseInputFile", _
-                   "PreviewTTUM", "ValidateEntries", "ResetDateToToday", _
+    macros = Array("GenerateTTUM", "GenerateForAnotherDate", _
+                   "ImportLatestFile", "ChooseInputFile", _
+                   "PreviewTTUM", "ValidateEntries", "UseTodaysDate", _
                    "ClearAmounts", "BrowseOutputFolder", "OpenOutputFolder")
 
     ' The workbook already carries its buttons. When they are there, just make

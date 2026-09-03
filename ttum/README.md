@@ -14,9 +14,11 @@ equal credits, and writes the `.txt` file.
 ## Daily use
 
 1. **Open the workbook** and click **Enable Content** when Excel asks about macros.
-2. **Dashboard - check the date.** The value date is already today's. To build a
-   file for a different day, just type that date over it. The file-name date and
-   the file name update themselves.
+2. **Dashboard - which day is this file for?** Leave **Use today's date?** on
+   `Yes` for today. For any other day, either set it to `No` and type the date in
+   the box below it, or click **Generate for Another Date** and type the date when
+   asked - that sets it and generates in one go. The value date shows the weekday
+   alongside it, and the file-name date and file name follow automatically.
 3. **Get the day's amounts in** - either way works, and you can mix them:
 
    * **From the settlement file:** click **Import Latest Input File**. It reads the
@@ -41,7 +43,22 @@ equal credits, and writes the `.txt` file.
 
 Use **Preview Records** first if you want to see the exact 186-character lines
 without writing anything to disk. **Clear Amounts** blanks the amount column
-ready for the next day.
+ready for the next day, and **Use Today's Date** puts the workbook back on today.
+
+### Generating for a past or future day
+
+Nothing about the rest of the flow changes - the date simply drives every record,
+the narration dates and the file name. Three routes reach it:
+
+| Route | Use it when |
+|---|---|
+| **Generate for Another Date** button | You know the date and want the file now |
+| **Use today's date? = No**, then type the date | You want to set the date and check the totals before generating |
+| **Import a settlement file** | The file's own records set the date for you |
+
+A date in the future, or more than 30 days back, asks for confirmation before
+generating - it is usually a typo, and a misdated settlement file is expensive.
+Confirm and it proceeds normally.
 
 ---
 

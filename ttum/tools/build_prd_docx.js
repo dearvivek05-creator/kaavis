@@ -321,7 +321,7 @@ children.push(H1("6", "Domain rules"));
 children.push(H2("Amounts are keyed in paise"));
 children.push(P([run("The settlement report gives figures with the paise as the last two digits and no decimal point, so that is what the operator types: "), mono("47400"), run(" means ₹474.00. The sheet shows a live "), b("Reads as (INR)"), run(" column beside each entry so the decimal point is never in doubt, and a fractional entry is rejected rather than guessed at. A configuration setting switches the column to rupees for anyone who prefers "), mono("474.00"), run(".")]));
 children.push(H2("Two dates, and they differ"));
-children.push(P([b("The value date"), run(" is carried inside every record, twice. "), b("The file-name date"), run(" is what the file is called. In the bank’s accepted example these differ by one day — records dated 15 July in a file named for 16 July — so the offset is a setting, defaulting to one day, and the resolved file name is shown on screen before generation.")]));
+children.push(P([run("A file is generated for today by default, and for any other day by switching the dashboard off today and entering a date. "), b("The value date"), run(" is carried inside every record, twice. "), b("The file-name date"), run(" is what the file is called. In the bank’s accepted example these differ by one day — records dated 15 July in a file named for 16 July — so the offset is a setting, defaulting to one day, and the resolved file name is shown on screen before generation.")]));
 children.push(H2("The day must balance"));
 children.push(P("Total debits must equal total credits. Both sample days do so exactly, and the balancing entry is the net settlement line. This is treated as a hard rule: an unbalanced day blocks generation by default, and the running difference is displayed while amounts are entered."));
 children.push(H2("Narrations are templates"));
@@ -347,7 +347,8 @@ children.push(P([run("The match keys carry their full wording deliberately: "), 
 // 7 --------------------------------------------------------------------
 children.push(H1("7", "Functional requirements"));
 children.push(reqTable([
-  ["FR-1", "Date selection", "The value date defaults to the system date and accepts any date typed over it. The file-name date follows at a configurable offset and is itself editable. Both are visible before generation."],
+  ["FR-1", "Date selection", "A file can be generated for today or for any other day. A switch chooses between the system date and an explicitly entered one, so choosing a date never destroys the today setting and returning to today is one click. A Generate for Another Date action asks for the date and generates in one step. The file-name date follows at a configurable offset. The value date is shown with its weekday before generation."],
+  ["FR-1b", "Guard against a misdated file", "A value date in the future, or more than thirty days in the past, is confirmed before generation. Both are legitimate but usually a typo, and a misdated settlement file is expensive to unwind."],
   ["FR-2", "Manual entry", "A hundred-row grid holding include flag, description, account number, Dr/Cr, amount and narration template, pre-loaded with the nine standard lines. Dropdowns constrain the include and Dr/Cr columns; account numbers are held as text so leading zeros survive."],
   ["FR-3", "Import from the settlement file", "Reads the newest file matching a pattern from a designated folder, or a file the operator picks. The settlement file uses the same 186-character layout, so the same field positions parse it."],
   ["FR-4", "Import summary before any change", "A summary shows the file name, value date, record count, how many lines matched, every matched amount, and the debit/credit totals with their difference. Declining leaves the sheet exactly as it was."],
@@ -416,7 +417,7 @@ children.push(H2("Import route"));
 })));
 children.push(H2("Manual route"));
 [
-  ["Set the date", " if it is not today."],
+  ["Set the date", " if it is not today — the switch on the dashboard, or the Generate for Another Date action, which asks for the date and generates in one step."],
   ["Type the amounts", " against the nine standard lines, adjusting Dr/Cr where the day’s flow differs. The banner turns green when the day balances."],
   ["Generate.", " Identical from here on."],
 ].forEach(([head, rest], i) => children.push(new Paragraph({
