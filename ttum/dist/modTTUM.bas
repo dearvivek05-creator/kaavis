@@ -26,6 +26,7 @@ Attribute VB_Name = "modTTUM"
 '   ClearAmounts        blank the amount column, ready for the next day
 '   BrowseOutputFolder  pick the output folder
 '   OpenOutputFolder    open the output folder in Explorer
+'   CheckSetup          report what this workbook contains, when something misbehaves
 '   TTUM_Setup          restore the Dashboard buttons if they are ever missing
 '
 ' Amounts are keyed the way the settlement report shows them: with the Config
@@ -44,6 +45,9 @@ Private Const LEN_FILLER1      As Long = 26
 Private Const LEN_NARRATION    As Long = 35
 Private Const LEN_FILLER2      As Long = 70
 Private Const LEN_RECORD       As Long = 186
+
+' Bumped whenever this module changes, so a report can name the build in use.
+Public Const TTUM_VERSION      As String = "1.1"
 
 ' ---- Sheet and table geometry ----
 Private Const SH_DASHBOARD     As String = "Dashboard"
@@ -264,16 +268,16 @@ End Sub
 
 ' The newest file in `folder` whose name matches `pattern`.
 Private Function FindLatestFile(ByVal folder As String, ByVal pattern As String) As String
-    Dim name As String, best As String, bestTime As Date, stamp As Date
+    Dim found As String, best As String, bestTime As Date, stamp As Date
 
-    name = Dir$(JoinPath(folder, pattern))
-    Do While Len(name) > 0
-        stamp = FileDateTime(JoinPath(folder, name))
+    found = Dir$(JoinPath(folder, pattern))
+    Do While Len(found) > 0
+        stamp = FileDateTime(JoinPath(folder, found))
         If Len(best) = 0 Or stamp > bestTime Then
-            best = name
+            best = found
             bestTime = stamp
         End If
-        name = Dir$
+        found = Dir$
     Loop
 
     If Len(best) > 0 Then FindLatestFile = JoinPath(folder, best)
@@ -298,7 +302,26 @@ Private Sub DoImport(ByVal path As String)
         Exit Sub
     End If
 
+    If CountImportKeys(EntriesColumn("Import match text", COL_IMPORTKEY)) = 0 Then
+        MsgBox "The file was read - " & count & " records - but the Entries sheet has no " & _
+               "Import match text to match them against, so nothing could be loaded." & _
+               vbCrLf & vbCrLf & _
+               "On the Entries sheet, the column headed ""Import match text"" should hold a " & _
+               "distinctive piece of each line's narration, such as ""MC comm recd""." & _
+               vbCrLf & vbCrLf & _
+               "Run Check Setup for a full report of what this workbook is missing.", _
+               vbExclamation, "TTUM - nothing to match against"
+        SetStatus "Import stopped - the Entries sheet has no import match text.", True
+        Exit Sub
+    End If
+
     matched = MatchInputLines(lines, count, warnings)
+
+    If matched = 0 Then
+        MsgBox NothingMatchedText(lines, count), vbExclamation, "TTUM - nothing matched"
+        SetStatus "Import stopped - none of the " & count & " records matched a row.", True
+        Exit Sub
+    End If
 
     fileDate = lines(1).ValueDate
     For i = 1 To count
@@ -335,18 +358,19 @@ End Sub
 ' counted in `skipped` rather than silently dropped.
 Private Function ReadInputFile(ByVal path As String, ByRef lines() As InputLine, _
                                ByRef skipped As String) As Long
-    Dim f As Integer, raw As String, n As Long, bad As Long, blank As Long
+    Dim f As Integer, raw As String, n As Long, bad As Long
     Dim why As String, firstBad As String
 
     ReDim lines(1 To IMPORT_LAST_ROW - IMPORT_FIRST_ROW + 1)
     n = 0
 
     f = FreeFile
+    On Error GoTo CloseAndRaise
     Open path For Input As #f
     Do While Not EOF(f)
         Line Input #f, raw
         If Len(Trim$(raw)) = 0 Then
-            blank = blank + 1
+            ' a blank line, usually the one at the end of the file
         ElseIf n >= UBound(lines) Then
             bad = bad + 1
             If Len(firstBad) = 0 Then firstBad = "more than " & UBound(lines) & " records"
@@ -365,6 +389,13 @@ Private Function ReadInputFile(ByVal path As String, ByRef lines() As InputLine,
         skipped = "- " & bad & " line(s) in the file could not be read (" & firstBad & ")" & vbCrLf
     End If
     ReadInputFile = n
+    Exit Function
+
+CloseAndRaise:
+    ' Leaving the handle open would make every later import fail with "file
+    ' already open", so close it before letting the error travel on.
+    Close #f
+    Err.Raise Err.Number, "ReadInputFile", Err.Description
 End Function
 
 
@@ -404,6 +435,51 @@ Bad:
 End Function
 
 
+' Finds a column on the Entries sheet by its header, so a re-laid-out sheet or a
+' workbook built by a different version cannot silently point the import at the
+' wrong column. Falls back to the built-in position when the header is missing.
+Private Function EntriesColumn(ByVal headerText As String, ByVal fallback As Long) As Long
+    Dim ws As Worksheet, c As Long
+    On Error GoTo UseFallback
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    For c = 1 To 40
+        If StrComp(Trim$(CStr(ws.Cells(ENTRY_FIRST_ROW - 1, c).Value)), _
+                   headerText, vbTextCompare) = 0 Then
+            EntriesColumn = c
+            Exit Function
+        End If
+    Next c
+UseFallback:
+    EntriesColumn = fallback
+End Function
+
+
+' The import match text held against a row, or "" when there is none.
+'
+' Anything purely numeric is ignored on purpose: if the lookup ever lands on a
+' helper column full of row numbers, a narration containing "1" must not be
+' treated as a match.
+Private Function ImportKeyAt(ByVal ws As Worksheet, ByVal r As Long, _
+                             ByVal keyCol As Long) As String
+    Dim key As String
+    key = Trim$(CStr(ws.Cells(r, keyCol).Value))
+    If Len(key) = 0 Then Exit Function
+    If IsNumeric(key) Then Exit Function
+    ImportKeyAt = key
+End Function
+
+
+' How many rows carry a usable import match text.
+Private Function CountImportKeys(ByVal keyCol As Long) As Long
+    Dim ws As Worksheet, r As Long, n As Long
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+        If Len(ImportKeyAt(ws, r, keyCol)) > 0 Then n = n + 1
+    Next r
+    CountImportKeys = n
+End Function
+
+
 ' Decides which Entries row each line belongs to, by looking for that row's
 ' import match text inside the line's narration.
 Private Function MatchInputLines(ByRef lines() As InputLine, ByVal count As Long, _
@@ -411,13 +487,15 @@ Private Function MatchInputLines(ByRef lines() As InputLine, ByVal count As Long
     Dim ws As Worksheet, r As Long, i As Long, hits As Long
     Dim key As String, matched As Long, claimedBy As Long
     Dim unmatchedLines As String, unmatchedRows As String
+    Dim keyCol As Long
 
     Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    keyCol = EntriesColumn("Import match text", COL_IMPORTKEY)
 
     For i = 1 To count
         hits = 0
         For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
-            key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+            key = ImportKeyAt(ws, r, keyCol)
             If Len(key) > 0 Then
                 If InStr(1, lines(i).Narration, key, vbTextCompare) > 0 Then
                     hits = hits + 1
@@ -439,7 +517,7 @@ Private Function MatchInputLines(ByRef lines() As InputLine, ByVal count As Long
 
     ' Two lines landing on one row would silently overwrite each other.
     For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
-        key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+        key = ImportKeyAt(ws, r, keyCol)
         If Len(key) > 0 Then
             claimedBy = 0
             For i = 1 To count
@@ -464,6 +542,42 @@ Private Function MatchInputLines(ByRef lines() As InputLine, ByVal count As Long
     End If
 
     MatchInputLines = matched
+End Function
+
+
+' Shown when the file read cleanly but nothing lined up: the two lists side by
+' side are what tells the operator whether the wording changed at either end.
+Private Function NothingMatchedText(ByRef lines() As InputLine, ByVal count As Long) As String
+    Dim ws As Worksheet, s As String, i As Long, r As Long, shown As Long
+    Dim key As String, keyCol As Long
+
+    Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    keyCol = EntriesColumn("Import match text", COL_IMPORTKEY)
+
+    s = count & " records were read, but none of them matched a row on the Entries sheet, " & _
+        "so nothing was loaded." & vbCrLf & vbCrLf & _
+        "Narrations found in the file:" & vbCrLf
+    For i = 1 To count
+        If shown < 6 Then
+            shown = shown + 1
+            s = s & "    " & lines(i).Narration & vbCrLf
+        End If
+    Next i
+    If count > shown Then s = s & "    ... and " & (count - shown) & " more" & vbCrLf
+
+    s = s & vbCrLf & "Import match text on the Entries sheet:" & vbCrLf
+    shown = 0
+    For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+        key = ImportKeyAt(ws, r, keyCol)
+        If Len(key) > 0 And shown < 6 Then
+            shown = shown + 1
+            s = s & "    " & key & vbCrLf
+        End If
+    Next r
+
+    s = s & vbCrLf & "A row claims a line when its match text appears inside that line's " & _
+        "narration. Edit the match text to suit the wording above."
+    NothingMatchedText = s
 End Function
 
 
@@ -512,16 +626,17 @@ Private Sub ApplyImport(ByRef lines() As InputLine, ByVal count As Long, _
                         ByVal path As String, ByVal fileDate As Date)
     Dim ws As Worksheet, imp As Worksheet
     Dim r As Long, i As Long, keyedAsPaise As Boolean, applied As Long
-    Dim key As String, claimed As Boolean
+    Dim key As String, claimed As Boolean, keyCol As Long
 
     Application.ScreenUpdating = False
     keyedAsPaise = AmountKeyedAsPaise()
     Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+    keyCol = EntriesColumn("Import match text", COL_IMPORTKEY)
     ClearRowHighlights
 
     ' Rows the file did not mention must not keep yesterday's figure.
     For r = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
-        key = Trim$(CStr(ws.Cells(r, COL_IMPORTKEY).Value))
+        key = ImportKeyAt(ws, r, keyCol)
         If Len(key) > 0 Then
             claimed = False
             For i = 1 To count
@@ -1225,6 +1340,176 @@ Private Sub AppendLog(ByVal valueDate As Date, ByVal fileDate As Date, ByVal fil
 End Sub
 
 
+' Writes a report of what this workbook actually contains: which sheets and
+' named ranges are present, where the import match text was found, what Config
+' says, and whether the input folder can be read. When something does not work,
+' this is the fastest way to see why.
+Public Sub CheckSetup()
+    Dim ws As Worksheet, rep As Worksheet
+    Dim r As Long, n As Long, keyCol As Long, problems As Long
+    Dim folder As String, pattern As String, newest As String
+    Dim headline As String
+
+    On Error GoTo Fail
+    Set rep = GetOrCreateSheet("Diagnostics")
+    rep.Cells.Clear
+    r = 1
+
+    r = Say(rep, r, "TTUM SETUP CHECK", "")
+    r = Say(rep, r, "Run at", Format$(Now, "dd-mmm-yyyy hh:nn"))
+    r = Say(rep, r, "Macro version", TTUM_VERSION)
+    r = Say(rep, r, "Excel version", Application.Version)
+    r = Say(rep, r, "Workbook", ThisWorkbook.Name)
+    r = Say(rep, r, "Folder", ThisWorkbook.path)
+    r = r + 1
+
+    ' ---- sheets ---------------------------------------------------------
+    r = Say(rep, r, "SHEETS", "")
+    Dim wanted As Variant, i As Long
+    wanted = Array(SH_DASHBOARD, SH_ENTRIES, SH_IMPORT, SH_CONFIG, SH_LOG, _
+                   "Text Output", "Layout", "Setup")
+    For i = LBound(wanted) To UBound(wanted)
+        If SheetExists(CStr(wanted(i))) Then
+            r = Say(rep, r, CStr(wanted(i)), "present")
+        Else
+            r = Say(rep, r, CStr(wanted(i)), "MISSING")
+            problems = problems + 1
+        End If
+    Next i
+    r = r + 1
+
+    ' ---- named ranges ---------------------------------------------------
+    r = Say(rep, r, "NAMED RANGES", "")
+    Dim names As Variant
+    names = Array("ttUseToday", "ttChosenDate", "ttValueDate", "ttFileDate", _
+                  "ttOutputFolder", "ttStatus", "ttAmountUnit", "ttFileNamePattern", _
+                  "ttFileDateOffset", "ttEnforceBalance", "ttTrailingNewline", _
+                  "ttInputFolder", "ttInputPattern", "ttImportSetsDate", "ttLastImport")
+    For i = LBound(names) To UBound(names)
+        If NameExists(CStr(names(i))) Then
+            r = Say(rep, r, CStr(names(i)), "-> " & GetConfigText(CStr(names(i)), "(empty)"))
+        Else
+            r = Say(rep, r, CStr(names(i)), "MISSING")
+            problems = problems + 1
+        End If
+    Next i
+    r = r + 1
+
+    ' ---- the import match text ------------------------------------------
+    r = Say(rep, r, "IMPORT MATCHING", "")
+    If Not SheetExists(SH_ENTRIES) Then
+        r = Say(rep, r, "Entries sheet", "MISSING - import cannot work")
+        problems = problems + 1
+    Else
+        Set ws = ThisWorkbook.Worksheets(SH_ENTRIES)
+        keyCol = EntriesColumn("Import match text", 0)
+        If keyCol = 0 Then
+            r = Say(rep, r, "Match text column", _
+                    "NOT FOUND - no column on row " & (ENTRY_FIRST_ROW - 1) & _
+                    " is headed 'Import match text'")
+            problems = problems + 1
+            keyCol = COL_IMPORTKEY
+        Else
+            r = Say(rep, r, "Match text column", "column " & ColLetter(keyCol) & _
+                    " (found by its heading)")
+        End If
+        n = CountImportKeys(keyCol)
+        If n = 0 Then
+            r = Say(rep, r, "Match texts found", "NONE - nothing can be imported")
+            problems = problems + 1
+        Else
+            r = Say(rep, r, "Match texts found", CStr(n))
+            Dim listed As Long
+            For i = ENTRY_FIRST_ROW To ENTRY_LAST_ROW
+                If Len(ImportKeyAt(ws, i, keyCol)) > 0 And listed < 12 Then
+                    listed = listed + 1
+                    r = Say(rep, r, "   row " & i, ImportKeyAt(ws, i, keyCol))
+                End If
+            Next i
+        End If
+    End If
+    r = r + 1
+
+    ' ---- the input folder -----------------------------------------------
+    r = Say(rep, r, "INPUT FILE", "")
+    folder = GetConfigText("ttInputFolder", "")
+    pattern = GetConfigText("ttInputPattern", "*.txt")
+    If Len(folder) = 0 Then
+        r = Say(rep, r, "Input folder", "not set - Import Latest asks you to pick a file")
+    ElseIf Len(Dir$(folder, vbDirectory)) = 0 Then
+        r = Say(rep, r, "Input folder", "DOES NOT EXIST: " & folder)
+        problems = problems + 1
+    Else
+        r = Say(rep, r, "Input folder", folder)
+        newest = FindLatestFile(folder, pattern)
+        If Len(newest) = 0 Then
+            r = Say(rep, r, "Newest match", "NONE matching " & pattern)
+            problems = problems + 1
+        Else
+            r = Say(rep, r, "Newest match", newest)
+        End If
+    End If
+    r = Say(rep, r, "File pattern", pattern)
+    r = r + 1
+
+    r = Say(rep, r, "OUTPUT", "")
+    r = Say(rep, r, "Output folder", ResolveOutputFolder())
+    r = Say(rep, r, "Writable", IIf(EnsureFolder(ResolveOutputFolder()), "yes", "NO"))
+
+    rep.Columns("A").ColumnWidth = 26
+    rep.Columns("B").ColumnWidth = 84
+    rep.Activate
+    rep.Range("A1").Select
+
+    If problems = 0 Then
+        headline = "Everything this utility needs is present."
+    Else
+        headline = problems & " problem(s) found - they are marked in capitals on the " & _
+                   "Diagnostics sheet."
+    End If
+    MsgBox headline & vbCrLf & vbCrLf & _
+           "The full report is on the Diagnostics sheet. Copy it into an email if you " & _
+           "need someone to look at it.", _
+           IIf(problems = 0, vbInformation, vbExclamation), "TTUM - setup check"
+    Exit Sub
+
+Fail:
+    MsgBox "The setup check could not finish." & vbCrLf & vbCrLf & _
+           "Error " & Err.Number & ": " & Err.Description, vbCritical, "TTUM - setup check"
+End Sub
+
+
+' Writes one label/value line of the report and returns the next row.
+Private Function Say(ByVal ws As Worksheet, ByVal r As Long, ByVal label As String, _
+                     ByVal value As String) As Long
+    ws.Cells(r, 1).Value = label
+    ws.Cells(r, 2).Value = value
+    If Len(value) = 0 Then ws.Cells(r, 1).Font.Bold = True
+    Say = r + 1
+End Function
+
+
+Private Function SheetExists(ByVal sheetName As String) As Boolean
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(sheetName)
+    SheetExists = Not ws Is Nothing
+End Function
+
+
+Private Function NameExists(ByVal nameRef As String) As Boolean
+    Dim rng As Range
+    On Error Resume Next
+    Set rng = ThisWorkbook.Names(nameRef).RefersToRange
+    NameExists = Not rng Is Nothing
+End Function
+
+
+Private Function ColLetter(ByVal col As Long) As String
+    ColLetter = Split(ThisWorkbook.Worksheets(SH_ENTRIES).Cells(1, col).Address, "$")(1)
+End Function
+
+
 '==============================================================================
 ' Dashboard buttons
 '==============================================================================
@@ -1246,11 +1531,13 @@ Public Sub TTUM_Setup()
     labels = Array("Generate TTUM File", "Generate for Another Date", _
                    "Import Latest Input File", "Choose Input File", _
                    "Preview Records", "Validate Entries", "Use Today's Date", _
-                   "Clear Amounts", "Choose Output Folder", "Open Output Folder")
+                   "Clear Amounts", "Choose Output Folder", "Open Output Folder", _
+                   "Check Setup")
     macros = Array("GenerateTTUM", "GenerateForAnotherDate", _
                    "ImportLatestFile", "ChooseInputFile", _
                    "PreviewTTUM", "ValidateEntries", "UseTodaysDate", _
-                   "ClearAmounts", "BrowseOutputFolder", "OpenOutputFolder")
+                   "ClearAmounts", "BrowseOutputFolder", "OpenOutputFolder", _
+                   "CheckSetup")
 
     ' The workbook already carries its buttons. When they are there, just make
     ' sure each one still points at its macro - that is what repairs a button

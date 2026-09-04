@@ -653,6 +653,18 @@ def build_setup(ws):
         ("Use the Text Output sheet. It builds the same records with worksheet formulas and no "
          "macro at all - copy them into Notepad and save. Nothing else about the workbook "
          "changes: the dates, amounts and checks all work as normal.", None),
+
+        ("If the import does not load anything", "head"),
+        ("Click Check Setup. It writes a Diagnostics sheet listing every sheet and setting this "
+         "workbook has, where the import match text was found, how many match texts there are, "
+         "and whether the input folder can be read. Anything wrong is marked in capitals.", None),
+        ("The usual cause is the Import match text column on the Entries sheet: a row claims a "
+         "line when its match text appears inside that line's narration, so if the settlement "
+         "system changes its wording the match texts have to change with it. When nothing "
+         "matches, the message lists the narrations found in the file beside the match texts on "
+         "the sheet, so you can see which end moved.", None),
+        ("Mixing files from different versions also breaks it - a workbook from one build with "
+         "the macro from another. Take both from the same download.", "note"),
     ]
 
     row = 4
@@ -692,6 +704,7 @@ BUTTONS = [
     ("Clear Amounts", "ClearAmounts", False),
     ("Choose Output Folder...", "BrowseOutputFolder", False),
     ("Open Output Folder", "OpenOutputFolder", False),
+    ("Check Setup", "CheckSetup", False),
 ]
 
 BUTTON_COL = 7          # column H, zero based

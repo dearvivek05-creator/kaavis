@@ -150,6 +150,25 @@ Import sheet as `-- no match --`. They are left out, which puts the sheet out of
 balance, which in turn stops generation - so an unmatched line cannot slip
 through into a file.
 
+### If the import loads nothing
+
+Click **Check Setup**. It writes a **Diagnostics** sheet listing every sheet and
+setting the workbook has, which column the import match text was found in, how
+many match texts exist, and whether the input folder can be read. Anything wrong
+is marked in capitals, and the sheet can be copied straight into an email.
+
+The two things that actually break it:
+
+- **The match text no longer matches.** A row claims a line when its match text
+  appears inside that line's narration, so if the settlement system rewords a
+  narration the match text has to change with it. When nothing matches, the
+  message lists the narrations found in the file beside the match texts on the
+  sheet, so you can see which end moved.
+- **Mixed versions.** A workbook from one build with the macro from another. The
+  match text column is now found by its heading rather than its position, so a
+  moved column no longer breaks it silently - but take both files from the same
+  download anyway.
+
 **With macros blocked**, the Import sheet still works: open the settlement file in
 Notepad, copy every line, and paste into cell `B10`. The columns beside it pull out
 the account, date, amount, Dr/Cr and narration, show which Entries row each line

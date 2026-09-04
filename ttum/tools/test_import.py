@@ -54,10 +54,30 @@ def main():
     config = {wb["Config"].cell(row=r, column=2).value: wb["Config"].cell(row=r, column=3).value
               for r in range(5, 13)}
 
+    # Locate the match-text column the way the macro does: by its heading, not by
+    # a fixed position. A version mismatch that moved it must fail loudly here.
+    header_row = FIRST_ROW - 1
+    key_col = None
+    for c in range(1, 41):
+        if str(entries.cell(row=header_row, column=c).value or "").strip().lower() \
+                == "import match text":
+            key_col = c
+            break
+    if key_col is None:
+        return fail("no column on row %d is headed 'Import match text'" % header_row)
+
+    # A purely numeric cell must never be usable as a key: if the lookup ever
+    # landed on a helper column of row numbers, a narration containing "1" would
+    # otherwise match.
+    for r in range(FIRST_ROW, LAST_ROW + 1):
+        raw = entries.cell(row=r, column=key_col).value
+        if raw is not None and str(raw).strip().replace(".", "", 1).isdigit():
+            return fail("row %d holds a numeric import key: %r" % (r, raw))
+
     # The rows that can take an imported figure.
     keyed = []
     for r in range(FIRST_ROW, LAST_ROW + 1):
-        key = entries.cell(row=r, column=8).value
+        key = entries.cell(row=r, column=key_col).value
         if key and str(key).strip():
             keyed.append((r, str(key).strip(),
                           entries.cell(row=r, column=2).value,
@@ -123,6 +143,8 @@ def main():
     file_name = substitute_tokens(config["File name pattern"], value_date + timedelta(days=offset))
 
     print("PASS: the settlement file imports cleanly and generates a valid TTUM file")
+    print("      match text found by heading in column %d, %d keys, none numeric"
+          % (key_col, len(keyed)))
     print("      %d records read, all %d matched 1:1 to the Entries sheet"
           % (len(parsed), len(loaded)))
     print("      value date %s, debit %.2f = credit %.2f"
